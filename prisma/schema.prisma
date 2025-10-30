@@ -1,0 +1,171 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  passwordHash String
+  name      String?
+  role      Role     @default(user)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  isActive  Boolean  @default(false)  // Changed to false - requires admin approval
+  isExecutionEnabled Boolean @default(true)
+  primaryBroker String?
+  restrictedSymbols String[] @default([])
+
+  tradingAccounts TradingAccount[]
+  taggedSymbols   TaggedSymbol[]
+  signals         Signal[]
+  logs            Log[]
+
+  @@map("users")
+}
+
+model TradingAccount {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String   // Account name/identifier
+  broker         String
+  clientCode     String?  // AngelOne client code
+  apiKey         String   @db.VarChar(255)
+  secret         String   @db.VarChar(255)
+  userPin        String   @db.VarChar(10)
+  accessToken    String?  @db.Text
+  refreshToken   String?  @db.Text
+  tokenExpiresAt DateTime?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  lastUsed       DateTime?
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@map("trading_accounts")
+}
+
+model Signal {
+  id         String   @id @default(cuid())
+  adminId    String
+  symbolId   String?  // Reference to Symbol table
+  symbol     String   // Keep for backward compatibility
+  quantity   Int
+  action     Action
+  type       OrderType
+  orderType  PriceType @default(MARKET)
+  limitPrice Float?
+  broadcastAt DateTime @default(now())
+  status     Status   @default(pending)
+
+  admin   User     @relation(fields: [adminId], references: [id])
+  symbolData Symbol? @relation(fields: [symbolId], references: [id])
+  orders  Order[]
+
+  @@map("signals")
+}
+
+model Order {
+  id            String    @id @default(cuid())
+  signalId      String
+  accountId     String
+  brokerOrderId String?
+  status        Status    @default(pending)
+  executedAt    DateTime?
+  errorMessage  String?
+
+  signal  Signal         @relation(fields: [signalId], references: [id], onDelete: Cascade)
+  account TradingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("orders")
+}
+
+model Symbol {
+  id              String    @id @default(cuid())
+  token           String?   @unique // AngelOne instrument token
+  symbol          String    // Trading symbol
+  name            String    // Company name
+  exchange        String    // Exchange (NSE, BSE, etc.)
+  instrumentType  String?   // EQ, FUT, OPT, etc.
+  expiry          DateTime? // Expiry date for derivatives
+  strike          Float?    // Strike price for options
+  lotSize         Int?      // Lot size
+  tickSize        Float?    // Tick size
+  exchSeg         String?   // Exchange segment
+  lastUpdated     DateTime  @default(now())
+  isActive        Boolean   @default(true)
+
+  taggedSymbols TaggedSymbol[]
+  signals       Signal[]
+
+  @@map("symbols")
+}
+
+model TaggedSymbol {
+  id       String @id @default(cuid())
+  userId   String
+  symbolId String
+  taggedAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol Symbol @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, symbolId])
+  @@map("tagged_symbols")
+}
+
+model Log {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  details   Json
+  timestamp DateTime @default(now())
+  level     LogLevel
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("logs")
+}
+
+enum Role {
+  user
+  admin
+  super_admin
+}
+
+enum Action {
+  BUY
+  SELL
+}
+
+enum OrderType {
+  INTRADAY
+  DELIVERY
+}
+
+enum PriceType {
+  MARKET
+  LIMIT
+}
+
+enum Status {
+  pending
+  executed
+  partially_executed
+  failed
+  cancelled
+}
+
+enum LogLevel {
+  info
+  warn
+  error
+}

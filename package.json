@@ -1,0 +1,41 @@
+{
+  "name": "trading-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "cross-env PORT=4000 next dev",
+    "build": "next build",
+    "start": "cross-env PORT=4000 next start",
+    "deploy": "zrok share reserved \"oneclick\"",
+    "deploy-full": "start cmd /k \"npm start\" && timeout /t 5 && npm run deploy",
+    "refresh-tokens": "tsx scripts/refresh-tokens.ts",
+    "lint": "next lint"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.0.0",
+    "@types/bcryptjs": "^3.0.0",
+    "axios": "^1.13.1",
+    "bcryptjs": "^3.0.2",
+    "next": "^15.0.0",
+    "next-auth": "^4.24.13",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "autoprefixer": "^10.0.0",
+    "cross-env": "^10.1.0",
+    "eslint": "^8.0.0",
+    "eslint-config-next": "^15.0.0",
+    "postcss": "^8.0.0",
+    "prisma": "^5.0.0",
+    "tailwindcss": "^3.0.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.0.0"
+  }
+}
