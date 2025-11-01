@@ -27,6 +27,7 @@ model User {
   taggedSymbols   TaggedSymbol[]
   signals         Signal[]
   logs            Log[]
+  apiRequests     ApiRequest[]
 
   @@map("users")
 }
@@ -135,6 +136,31 @@ model Log {
   @@map("logs")
 }
 
+model ApiRequest {
+  id            String      @id @default(cuid())
+  requestId     String      @unique // Unique identifier for request correlation
+  requestType   ApiRequestType // frontend_to_backend or backend_to_broker
+  method        String      // HTTP method (GET, POST, etc.)
+  url           String      // Request URL
+  headers       Json        // Request headers (filtered, no sensitive data)
+  body          String?     // Request body as string
+  userId        String?     // Associated user ID if authenticated
+  ipAddress     String?     // Client IP address
+  userAgent     String?     // User agent string
+  startedAt     DateTime    @default(now()) // Request start time
+  endedAt       DateTime?   // Request end time
+  duration      Int?        // Duration in milliseconds
+  statusCode    Int?        // HTTP status code
+  responseHeaders Json?     // Response headers
+  responseBody  String?     // Response body as string
+  error         String?     // Error message if any
+  isSuccessful  Boolean     @default(true) // Whether request was successful
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("api_requests")
+}
+
 enum Role {
   user
   admin
@@ -168,4 +194,9 @@ enum LogLevel {
   info
   warn
   error
+}
+
+enum ApiRequestType {
+  frontend_to_backend
+  backend_to_broker
 }

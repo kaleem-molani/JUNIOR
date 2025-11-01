@@ -183,6 +183,13 @@ export default function Header() {
                           >
                             Signals
                           </Link>
+                          <Link
+                            href="/monitoring"
+                            className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                            onClick={() => setIsAdminMenuOpen(false)}
+                          >
+                            Monitoring
+                          </Link>
                         </div>
                       )}
                     </div>

@@ -3,9 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "cross-env PORT=4000 next dev",
+    "dev": "cross-env NODE_ENV=development APP_ENV=development next dev",
+    "dev:prod": "cross-env NODE_ENV=production APP_ENV=production PORT=4000 next dev",
+    "dev:sandbox": "cross-env NODE_ENV=development APP_ENV=sandbox PORT=4001 next dev",
+    "dev:dev": "cross-env NODE_ENV=development APP_ENV=development PORT=4002 next dev",
     "build": "next build",
-    "start": "cross-env PORT=4000 next start",
+    "build:prod": "cross-env NODE_ENV=production APP_ENV=production next build",
+    "build:sandbox": "cross-env NODE_ENV=development APP_ENV=sandbox next build",
+    "build:dev": "cross-env NODE_ENV=development APP_ENV=development next build",
+    "start": "cross-env NODE_ENV=production APP_ENV=production PORT=4000 next start",
+    "start:prod": "cross-env NODE_ENV=production APP_ENV=production PORT=4000 next start",
+    "start:sandbox": "cross-env NODE_ENV=development APP_ENV=sandbox PORT=4001 next start",
+    "start:dev": "cross-env NODE_ENV=development APP_ENV=development PORT=4002 next start",
     "deploy": "zrok share reserved \"oneclick\"",
     "deploy-full": "start cmd /k \"npm start\" && timeout /t 5 && npm run deploy",
     "refresh-tokens": "tsx scripts/refresh-tokens.ts",
@@ -22,7 +31,8 @@
     "next": "^15.0.0",
     "next-auth": "^4.24.13",
     "react": "^18.0.0",
-    "react-dom": "^18.0.0"
+    "react-dom": "^18.0.0",
+    "recharts": "^3.3.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

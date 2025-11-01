@@ -1,6 +1,6 @@
 // check-db.ts
-import { prisma } from './lib/prisma';
-import { InstrumentService } from './lib/services/instrument-service';
+import { prisma } from '../lib/prisma';
+import { InstrumentService } from '../lib/services/instrument-service';
 
 async function checkDatabase() {
   try {

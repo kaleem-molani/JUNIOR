@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  trading-app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "4002:4002"
+    environment:
+      - NODE_ENV=development
+      - APP_ENV=development
+      - PORT=4002
+    env_file:
+      - .env.development
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4002/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - trading-network
+
+  postgres-dev:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=trading_app_dev
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=root
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./prisma/migrations:/docker-entrypoint-initdb.d/migrations
+    restart: unless-stopped
+    networks:
+      - trading-network
+
+volumes:
+  postgres_dev_data:
+
+networks:
+  trading-network:
+    driver: bridge

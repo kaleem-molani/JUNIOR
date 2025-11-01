@@ -2,28 +2,66 @@
 
 A scalable trading application built with Next.js that enables users to connect their Angel One trading accounts and receive automated trading signals.
 
+## Environment Setup
+
+This application supports three environments with different port configurations:
+
+- **Production**: Port 4000
+- **Sandbox**: Port 4001
+- **Development**: Port 4002
+
+### Environment Files
+
+Create the following environment files based on your needs:
+
+- `.env.production` - Production environment (Port 4000)
+- `.env.sandbox` - Sandbox environment (Port 4001)
+- `.env.development` - Development environment (Port 4002)
+
+### Running Different Environments
+
+#### Using npm scripts:
+
+```bash
+# Production
+npm run dev:prod      # Development mode with prod config
+npm run build:prod    # Build for production
+npm run start:prod    # Start production server
+
+# Sandbox
+npm run dev:sandbox   # Development mode with sandbox config
+npm run build:sandbox # Build for sandbox
+npm run start:sandbox # Start sandbox server
+
+# Development
+npm run dev:dev       # Development mode with dev config
+npm run build:dev     # Build for development
+npm run start:dev     # Start development server
+```
+
+#### Using Docker:
+
+```bash
+# Production
+docker-compose -f docker-compose.prod.yml up --build
+
+# Sandbox
+docker-compose -f docker-compose.sandbox.yml up --build
+
+# Development (with hot reload)
+docker-compose -f docker-compose.dev.yml up --build
+```
+
+### Environment Variables
+
+Each environment has specific configurations:
+
+- **Database URLs**: Different databases for each environment
+- **Ports**: 4000 (prod), 4001 (sandbox), 4002 (dev)
+- **Logging**: Debug level for dev/sandbox, warn for production
+- **Mock Settings**: Sandbox uses mock broker API
+
 ## Getting Started
-
-First, install dependencies:
-
-```bash
-npm install
-```
-
-Set up the database:
-
-```bash
-npx prisma generate
-npx prisma db push
-```
-
-Then, run the development server:
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 ## Database Setup
 

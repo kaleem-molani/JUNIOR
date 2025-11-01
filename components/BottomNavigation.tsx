@@ -122,7 +122,7 @@ export default function BottomNavigation() {
         <Link
           href="/admin"
           className={`flex flex-col items-center justify-center py-2 px-3 rounded-lg transition-colors duration-200 ${
-            pathname.startsWith('/admin') ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
+            pathname.startsWith('/admin') || pathname === '/monitoring' ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
           }`}
         >
           <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -9,9 +9,4 @@ echo.
 echo Press Ctrl+C to stop the server
 echo.
 
-set SANDBOX_MODE=true
-set MOCK_BROKER_API=true
-set ENABLE_PERFORMANCE_LOGGING=true
-set LOG_LEVEL=debug
-
-npm run dev
+node scripts/start-sandbox.js
