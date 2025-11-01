@@ -89,6 +89,8 @@ export async function POST(request: NextRequest) {
 
         // Update each order's status
         for (const order of accountOrders) {
+          if (!order.brokerOrderId) continue; // Skip orders without broker order ID
+
           const orderBookEntry = orderBookMap.get(order.brokerOrderId);
 
           if (orderBookEntry) {

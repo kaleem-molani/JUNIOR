@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { v4 as uuidv4 } from 'uuid';
+
+// Simple ID generator for Edge Runtime compatibility
+function generateId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
 
 // Headers to exclude from logging (sensitive data)
 const SENSITIVE_HEADERS = new Set([
@@ -40,7 +44,7 @@ function getClientIP(request: NextRequest): string {
     return clientIP;
   }
 
-  return request.ip || 'unknown';
+  return 'unknown';
 }
 
 // Determine request type
@@ -85,7 +89,7 @@ async function getUserId(request: NextRequest): Promise<string | null> {
 
 export async function apiMonitoringMiddleware(request: NextRequest) {
   const startTime = Date.now();
-  const requestId = uuidv4();
+  const requestId = generateId();
   const url = request.url;
   const method = request.method;
 
@@ -108,4 +112,32 @@ export async function apiMonitoringMiddleware(request: NextRequest) {
   // For now, just pass through without database logging
   // We'll add database logging after confirming middleware works
   return NextResponse.next();
+}
+
+// Wrapper function for API routes
+export function withApiMonitoring(handler: (request: NextRequest) => Promise<NextResponse>, request: NextRequest) {
+  // Apply monitoring middleware logic
+  const startTime = Date.now();
+  const requestId = generateId();
+  const url = request.url;
+  const method = request.method;
+
+  console.log(`🔍 API Monitoring: ${method} ${url}`);
+
+  // Skip logging for monitoring and admin monitoring APIs to avoid infinite loops
+  if (url.includes('/api/monitoring') || url.includes('/api/admin/monitoring')) {
+    console.log(`⏭️ Skipping monitoring endpoint: ${url}`);
+    return handler(request);
+  }
+
+  // Only log API routes, not static assets or other requests
+  if (!request.nextUrl.pathname.startsWith('/api/')) {
+    console.log(`⏭️ Not an API route: ${request.nextUrl.pathname}`);
+    return handler(request);
+  }
+
+  console.log(`✅ Processing API request: ${method} ${request.nextUrl.pathname}`);
+
+  // Execute the handler
+  return handler(request);
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,19 +29,7 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     // Build where clause
-    const where: {
-      requestType?: 'frontend_to_backend' | 'backend_to_broker';
-      method?: string;
-      statusCode?: number;
-      userId?: string;
-      startedAt?: { gte?: Date; lte?: Date };
-      OR?: Array<{
-        url?: { contains: string; mode: string };
-        body?: { contains: string; mode: string };
-        responseBody?: { contains: string; mode: string };
-        error?: { contains: string; mode: string };
-      }>;
-    } = {};
+    const where: Prisma.ApiRequestWhereInput = {};
 
     if (requestType) {
       where.requestType = requestType;
@@ -70,10 +59,10 @@ export async function GET(request: NextRequest) {
 
     if (search) {
       where.OR = [
-        { url: { contains: search, mode: 'insensitive' } },
-        { body: { contains: search, mode: 'insensitive' } },
-        { responseBody: { contains: search, mode: 'insensitive' } },
-        { error: { contains: search, mode: 'insensitive' } }
+        { url: { contains: search, mode: 'insensitive' as const } },
+        { body: { contains: search, mode: 'insensitive' as const } },
+        { responseBody: { contains: search, mode: 'insensitive' as const } },
+        { error: { contains: search, mode: 'insensitive' as const } }
       ];
     }
 

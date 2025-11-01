@@ -9,8 +9,8 @@
     "dev:dev": "cross-env NODE_ENV=development APP_ENV=development PORT=4002 next dev",
     "build": "next build",
     "build:prod": "cross-env NODE_ENV=production APP_ENV=production next build",
-    "build:sandbox": "cross-env NODE_ENV=development APP_ENV=sandbox next build",
-    "build:dev": "cross-env NODE_ENV=development APP_ENV=development next build",
+    "build:sandbox": "cross-env NODE_ENV=production APP_ENV=sandbox next build",
+    "build:dev": "cross-env NODE_ENV=production APP_ENV=development next build",
     "start": "cross-env NODE_ENV=production APP_ENV=production PORT=4000 next start",
     "start:prod": "cross-env NODE_ENV=production APP_ENV=production PORT=4000 next start",
     "start:sandbox": "cross-env NODE_ENV=development APP_ENV=sandbox PORT=4001 next start",
@@ -18,7 +18,7 @@
     "deploy": "zrok share reserved \"oneclick\"",
     "deploy-full": "start cmd /k \"npm start\" && timeout /t 5 && npm run deploy",
     "refresh-tokens": "tsx scripts/refresh-tokens.ts",
-    "lint": "next lint"
+    "lint": "eslint ."
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

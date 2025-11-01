@@ -8,9 +8,10 @@ import { authOptions } from '@/lib/auth';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log('🎯 [API] Get signals for account:', params.id);
+  const { id: accountId } = await params;
+  console.log('🎯 [API] Get signals for account:', accountId);
 
   const session = await getServerSession(authOptions);
   if (!session) {
@@ -28,7 +29,6 @@ export async function GET(
     return NextResponse.json({ error: 'Administrators do not have trading accounts or signals' }, { status: 403 });
   }
 
-  const accountId = params.id;
   console.log('👤 [API] User ID from session:', session.user.id);
 
   try {

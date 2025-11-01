@@ -2,7 +2,6 @@
 // Test script to verify sandbox mode and mock broker integration
 
 const { BrokerFactory } = require('./lib/brokers/factory');
-const { IBrokerCredentials, IOrderRequest } = require('./lib/brokers/interfaces');
 
 // Set sandbox environment variables
 process.env.SANDBOX_MODE = 'true';
@@ -24,12 +23,12 @@ async function testSandboxMode() {
     console.log('✅ Broker has required methods:', hasRequiredMethods);
 
     // Test mock order placement
-    const mockCredentials: IBrokerCredentials = {
+    const mockCredentials = {
       apiKey: 'test-key',
       userPin: '123456'
     };
 
-    const mockOrder: IOrderRequest = {
+    const mockOrder = {
       symbol: 'RELIANCE',
       side: 'BUY',
       quantity: 1,
