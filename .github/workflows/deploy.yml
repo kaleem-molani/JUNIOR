@@ -97,6 +97,18 @@ jobs:
         name: deploy-package
         path: deploy-downloaded/
 
+    - name: Verify deployment files
+      run: |
+        echo "📦 Contents of deploy-downloaded/:"
+        ls -la deploy-downloaded/
+        echo "📦 Checking for ecosystem.config.js:"
+        if [ -f "deploy-downloaded/ecosystem.config.js" ]; then
+          echo "✅ ecosystem.config.js found in deploy-downloaded/"
+        else
+          echo "❌ ecosystem.config.js NOT found in deploy-downloaded/"
+          exit 1
+        fi
+
     - name: Deploy to Lightsail
       uses: appleboy/ssh-action@v1.0.0
       with:
@@ -104,6 +116,10 @@ jobs:
         username: ${{ secrets.LIGHTSAIL_USER }}
         key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
         port: ${{ secrets.LIGHTSAIL_PORT }}
+        script: |
+          # Create deployment directory
+          mkdir -p /tmp/deploy
+          echo "📁 Created /tmp/deploy directory"
         scp: |
           deploy-downloaded/ecosystem.config.js => /tmp/deploy/ecosystem.config.js
           deploy-downloaded/package.json => /tmp/deploy/package.json
@@ -113,7 +129,6 @@ jobs:
           deploy-downloaded/.next => /tmp/deploy/.next
           deploy-downloaded/prisma => /tmp/deploy/prisma
           deploy-downloaded/scripts => /tmp/deploy/scripts
-        script: |
           # Set deployment target
           DEPLOY_ENV="${{ github.event.inputs.deploy_target || 'staging' }}"
           echo "🚀 Deploying to: $DEPLOY_ENV"
