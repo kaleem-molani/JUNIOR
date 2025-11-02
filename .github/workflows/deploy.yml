@@ -91,6 +91,12 @@ jobs:
         path: deploy/
         retention-days: 1
 
+    - name: Download deployment artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: deploy-package
+        path: deploy-downloaded/
+
     - name: Deploy to Lightsail
       uses: appleboy/ssh-action@v1.0.0
       with:
@@ -99,6 +105,8 @@ jobs:
         key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
         port: ${{ secrets.LIGHTSAIL_PORT }}
         envs: DATABASE_URL,NEXTAUTH_SECRET
+        scp: |
+          deploy-downloaded/ => /tmp/deploy/
         script: |
           # Set deployment target
           DEPLOY_ENV="${{ github.event.inputs.deploy_target || 'staging' }}"
