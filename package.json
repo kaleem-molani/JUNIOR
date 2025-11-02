@@ -14,7 +14,8 @@
     "health": "curl -f http://localhost:4000/api/health",
     "refresh-tokens": "tsx scripts/refresh-tokens.ts",
     "scheduled-token-refresh": "tsx scripts/scheduled-token-refresh.ts",
-    "lint": "next lint",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "test": "npx tsx test/test-api-endpoints.ts",
     "test:ci": "npm run lint && npm run build && npm run test"
   },

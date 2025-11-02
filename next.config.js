@@ -1,11 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   serverExternalPackages: ['node-cron'],
   webpack: (config, { isServer }) => {
-    // Exclude test directory from build
+    // Exclude test directory and stress-test.ts from build
     config.resolve.alias = {
       ...config.resolve.alias,
-      'test': false
+      'test': false,
+      './stress-test.ts': false,
+      'stress-test.ts': false
     };
 
     // Handle Node.js built-ins and node: scheme for client-side

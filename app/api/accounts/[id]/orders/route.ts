@@ -9,7 +9,7 @@ import { prisma } from '@/lib/prisma';
 // GET /api/accounts/:id/orders
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -27,7 +27,7 @@ export async function GET(
       return NextResponse.json({ error: 'Administrators cannot access trading account orders' }, { status: 403 });
     }
 
-    const accountId = params?.id;
+    const { id: accountId } = await params;
     if (!accountId) {
       return NextResponse.json({ error: 'Missing account id' }, { status: 400 });
     }
