@@ -108,7 +108,7 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    if (session?.user.role === 'admin') {
+    if (session?.user.role === 'admin' || session?.user.role === 'super_admin') {
       fetchDashboardData();
     }
   }, [session]);

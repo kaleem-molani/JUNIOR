@@ -73,17 +73,32 @@ export class InstrumentService {
       }
 
       // Convert AngelOne format to our format
-      const instruments: AngelOneInstrument[] = data.map((item: RawAngelOneInstrument) => ({
-        token: item.token || item.instrument_token || item.symboltoken || '',
-        symbol: item.symbol || item.tradingsymbol || item.name || '',
-        name: item.name || item.instrument_name || item.symbol || '',
-        expiry: item.expiry || item.expirydate || '',
-        strike: item.strike ? parseFloat(item.strike.toString()) : null,
-        lotsize: item.lotsize ? parseInt(item.lotsize.toString()) : 1,
-        instrumenttype: item.instrumenttype || item.instrument_type || item.instrument || '',
-        exch_seg: item.exch_seg || item.exchange || item.exch || '',
-        tick_size: item.tick_size ? parseFloat(item.tick_size.toString()) : 0.01,
-      })).filter(instrument => {
+      const instruments: AngelOneInstrument[] = data.map((item: RawAngelOneInstrument, index) => {
+        const instrument = {
+          token: item.token || item.instrument_token || item.symboltoken || '',
+          symbol: item.symbol || item.tradingsymbol || item.name || '',
+          name: item.name || item.instrument_name || item.symbol || '',
+          expiry: item.expiry || item.expirydate || '',
+          strike: item.strike ? parseFloat(item.strike.toString()) : null,
+          lotsize: item.lotsize ? parseInt(item.lotsize.toString()) : 1,
+          instrumenttype: item.instrumenttype || item.instrument_type || item.instrument || '',
+          exch_seg: item.exch_seg || item.exchange || item.exch || '',
+          tick_size: item.tick_size ? parseFloat(item.tick_size.toString()) : 0.01,
+        };
+
+        // Debug YESBANK specifically
+        if (instrument.symbol === 'YESBANK' || instrument.symbol === 'YESBANK-EQ' || item.symbol === 'YESBANK' || item.symbol === 'YESBANK-EQ' || item.tradingsymbol === 'YESBANK') {
+          console.log('🔍 [Instrument Service] Found YESBANK at index', index, ':', {
+            raw: item,
+            processed: instrument,
+            token: item.token || item.instrument_token || item.symboltoken,
+            symbol: item.symbol || item.tradingsymbol || item.name,
+            exchange: item.exch_seg || item.exchange || item.exch,
+          });
+        }
+
+        return instrument;
+      }).filter(instrument => {
         // Skip instruments with empty tokens
         if (!instrument.token || instrument.token.trim() === '') {
           console.log('⚠️ [Instrument Service] Skipping instrument with empty token:', instrument.symbol);
@@ -129,17 +144,39 @@ export class InstrumentService {
     console.log('💾 [Instrument Service] ===== STORING INSTRUMENTS IN DATABASE =====');
     console.log('💾 [Instrument Service] Processing', instruments.length, 'instruments');
 
+    // Check for YESBANK specifically
+    const yesbankInstruments = instruments.filter(i => i.symbol === 'YESBANK' || i.symbol === 'YESBANK-EQ');
+    console.log('🔍 [Instrument Service] YESBANK instruments to store:', yesbankInstruments.length);
+    yesbankInstruments.forEach(yb => {
+      console.log('🔍 [Instrument Service] YESBANK details:', {
+        token: yb.token,
+        symbol: yb.symbol,
+        exch_seg: yb.exch_seg,
+        name: yb.name,
+        instrumenttype: yb.instrumenttype,
+      });
+    });
+
     const batchSize = 100; // Process in batches to avoid memory issues
     let processed = 0;
 
     for (let i = 0; i < instruments.length; i += batchSize) {
       const batch = instruments.slice(i, i + batchSize);
-      console.log('💾 [Instrument Service] Processing batch', Math.floor(i / batchSize) + 1, 'of', Math.ceil(instruments.length / batchSize));
+     // console.log('💾 [Instrument Service] Processing batch', Math.floor(i / batchSize) + 1, 'of', Math.ceil(instruments.length / batchSize));
 
       // Use upsert to create or update instruments
       const results = await Promise.allSettled(
-        batch.map(instrument =>
-          prisma.symbol.upsert({
+        batch.map(instrument => {
+          // Debug YESBANK in batch
+          if (instrument.symbol === 'YESBANK' || instrument.symbol === 'YESBANK-EQ') {
+            console.log('🔍 [Instrument Service] Processing YESBANK in batch:', {
+              token: instrument.token,
+              symbol: instrument.symbol,
+              exch_seg: instrument.exch_seg,
+            });
+          }
+
+          return prisma.symbol.upsert({
             where: { token: instrument.token },
             update: {
               symbol: instrument.symbol,
@@ -168,27 +205,29 @@ export class InstrumentService {
               isActive: true,
             },
           }).catch(error => {
-            console.error('❌ [Instrument Service] Failed to upsert instrument:', instrument.token, instrument.symbol, error.message);
+            console.error('❌ [Instrument Service] Failed to upsert instrument:', {
+              token: instrument.token,
+              symbol: instrument.symbol,
+              exch_seg: instrument.exch_seg,
+              instrumenttype: instrument.instrumenttype,
+              error: error.message,
+              code: error.code,
+            });
             throw error;
-          })
-        )
+          });
+        })
       );
 
       // Count results
-      let batchFailed = 0;
-
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           processed++;
           // We can't easily distinguish between create and update with upsert
           // but we can assume most are updates on refresh
         } else {
-          batchFailed++;
           console.error('❌ [Instrument Service] Batch upsert failed for instrument:', batch[index].token, result.reason);
         }
       });
-
-      console.log('💾 [Instrument Service] Batch', Math.floor(i / batchSize) + 1, 'results: processed', results.filter(r => r.status === 'fulfilled').length, 'failed', batchFailed);
     }
 
     console.log('💾 [Instrument Service] Processed', processed, 'instruments');
@@ -232,11 +271,20 @@ export class InstrumentService {
         where: {
           isActive: true,
           token: { not: null },
-          instrumentType: { not: null },
           exchange: exchange,
           OR: [
-            { symbol: { contains: query, mode: 'insensitive' } },
-            { name: { contains: query, mode: 'insensitive' } },
+            {
+              AND: [
+                { symbol: { contains: query, mode: 'insensitive' } },
+                exchange === 'NSE' ? {} : { instrumentType: { not: null } }
+              ]
+            },
+            {
+              AND: [
+                { name: { contains: query, mode: 'insensitive' } },
+                exchange === 'NSE' ? {} : { instrumentType: { not: null } }
+              ]
+            },
           ],
         },
         select: {

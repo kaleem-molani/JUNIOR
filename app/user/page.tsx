@@ -38,10 +38,12 @@ export default function UserPage() {
   // Custom hooks
   const {
     profile,
+    angelOneProfile,
     profileErrors,
     setProfileErrors,
     fetchUserProfile,
     updateProfile,
+    fetchAngelOneProfile,
   } = useUserProfile();
 
   const {
@@ -266,10 +268,13 @@ export default function UserPage() {
             {activeSection === 'profile' && (
               <ProfileSection
                 profile={profile}
+                angelOneProfile={angelOneProfile}
                 profileErrors={profileErrors}
                 onProfileUpdate={updateProfile}
                 onProfileErrorsChange={setProfileErrors}
                 onProfileRefresh={fetchUserProfile}
+                onFetchAngelOneProfile={fetchAngelOneProfile}
+                accounts={accounts}
               />
             )}
 

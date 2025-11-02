@@ -1,7 +1,7 @@
 // lib/brokers/mock-broker.ts
 // Mock broker implementation for sandbox testing
 
-import { IBroker, IBrokerCredentials, IOrderRequest, IOrderResponse, IOrderBookEntry, ITradeBookEntry, ISymbolDetails } from './interfaces';
+import { IBroker, IBrokerCredentials, IOrderRequest, IOrderResponse, IOrderBookEntry, ITradeBookEntry, ISymbolDetails, IAngelOneProfile } from './interfaces';
 
 export class MockBroker implements IBroker {
   private static mockOrderIdCounter = 1000000;
@@ -110,6 +110,34 @@ export class MockBroker implements IBroker {
       symbolToken,
       instrumentType: 'EQ',
       lotSize: 1
+    };
+  }
+
+  async getProfile(credentials: IBrokerCredentials): Promise<IAngelOneProfile> {
+    console.log(`🔧 [Mock Broker] Getting profile data`);
+
+    await this.delay(MockBroker.executionDelay);
+
+    return {
+      status: true,
+      message: 'Profile fetched successfully',
+      errorcode: '',
+      data: {
+        clientcode: 'MOCK123456',
+        name: 'Mock User',
+        email: 'mock@example.com',
+        mobileno: '9876543210',
+        exchanges: ['NSE', 'BSE'],
+        products: ['CNC', 'MIS'],
+        lastlogintime: new Date().toISOString(),
+        brokerid: 'MOCKBROKER',
+        bankname: 'Mock Bank',
+        bankbranch: 'Mock Branch',
+        bankaccno: '1234567890',
+        bankpincode: '110001',
+        dematid: 'MOCKDEMAT123',
+        panno: 'ABCDE1234F',
+      },
     };
   }
 

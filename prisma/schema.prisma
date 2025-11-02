@@ -49,8 +49,34 @@ model TradingAccount {
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders Order[]
+  profile AngelOneProfile?
 
   @@map("trading_accounts")
+}
+
+model AngelOneProfile {
+  id             String   @id @default(cuid())
+  accountId      String   @unique // Reference to TradingAccount
+  clientcode     String?
+  name           String?
+  email          String?
+  mobileno       String?
+  exchanges      String[] // Array of enabled exchanges
+  products       String[] // Array of enabled products
+  lastlogintime  String?
+  brokerid       String?
+  bankname       String?
+  bankbranch     String?
+  bankaccno      String?
+  bankpincode    String?
+  dematid        String?
+  panno          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  account TradingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("angel_one_profiles")
 }
 
 model Signal {

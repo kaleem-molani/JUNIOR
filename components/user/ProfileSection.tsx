@@ -1,26 +1,34 @@
 import { useState, useEffect } from 'react';
 import { useNotifications } from '@/lib/notifications';
 import BrokerSelect from '@/components/BrokerSelect';
-import { UserProfile, ProfileErrors } from '@/hooks/useUserProfile';
+import { UserProfile, ProfileErrors, AngelOneProfile } from '@/hooks/useUserProfile';
+import { TradingAccount } from '@/lib/types';
 
 interface ProfileSectionProps {
   profile: UserProfile;
+  angelOneProfile: AngelOneProfile | null;
   profileErrors: ProfileErrors;
   onProfileUpdate: (updates: Partial<UserProfile>) => Promise<{ success: boolean; error?: unknown }>;
   onProfileErrorsChange: (errors: ProfileErrors) => void;
   onProfileRefresh: () => Promise<void>;
+  onFetchAngelOneProfile: (accountName: string) => Promise<{ success: boolean; error?: string; profile?: AngelOneProfile }>;
+  accounts: TradingAccount[];
 }
 
 export default function ProfileSection({
   profile,
+  angelOneProfile,
   profileErrors,
   onProfileUpdate,
   onProfileErrorsChange,
   onProfileRefresh,
+  onFetchAngelOneProfile,
+  accounts,
 }: ProfileSectionProps) {
   const { addNotification } = useNotifications();
   const [localProfile, setLocalProfile] = useState<UserProfile>(profile);
   const [newSymbol, setNewSymbol] = useState('');
+  const [selectedAccount, setSelectedAccount] = useState<string>('');
 
   // Sync local state with props
   useEffect(() => {
@@ -44,10 +52,35 @@ export default function ProfileSection({
     });
   };
 
+  const handleFetchAngelOneProfile = async () => {
+    if (!selectedAccount) {
+      addNotification({
+        type: 'error',
+        title: 'Error',
+        message: 'Please select an account to fetch profile.',
+      });
+      return;
+    }
+
+    const result = await onFetchAngelOneProfile(selectedAccount);
+    if (result.success) {
+      addNotification({
+        type: 'success',
+        title: 'Profile Fetched',
+        message: 'AngelOne profile data has been fetched and stored successfully.',
+      });
+    } else {
+      addNotification({
+        type: 'error',
+        title: 'Error',
+        message: result.error || 'Failed to fetch AngelOne profile.',
+      });
+    }
+  };
+
   const handleUpdateProfile = async () => {
     // Validate required fields
     const errors: ProfileErrors = {};
-
     if (!localProfile.name.trim()) {
       errors.name = 'Full Name is required';
     }
@@ -190,6 +223,100 @@ export default function ProfileSection({
             Update Profile
           </button>
         </div>
+      </div>
+
+      {/* AngelOne Profile Section */}
+      <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-orange-50 to-red-50">
+        <div className="flex items-center space-x-3">
+          <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <h2 className="text-lg font-semibold text-gray-900">AngelOne Profile</h2>
+        </div>
+      </div>
+      <div className="p-6">
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Select Account
+          </label>
+          <select
+            value={selectedAccount}
+            onChange={(e) => setSelectedAccount(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors"
+          >
+            <option value="">Choose an account...</option>
+            {accounts.filter(account => account.broker === 'angelone').map(account => (
+              <option key={account.id} value={account.name}>
+                {account.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="mb-4">
+          <button
+            onClick={handleFetchAngelOneProfile}
+            disabled={!selectedAccount}
+            className="w-full sm:w-auto px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Fetch Profile Data
+          </button>
+        </div>
+
+        {angelOneProfile && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 pt-6 border-t border-gray-200">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Client Code</label>
+                <p className="mt-1 text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{angelOneProfile.clientcode || 'N/A'}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Name</label>
+                <p className="mt-1 text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{angelOneProfile.name || 'N/A'}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Email</label>
+                <p className="mt-1 text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{angelOneProfile.email || 'N/A'}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Mobile</label>
+                <p className="mt-1 text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{angelOneProfile.mobileno || 'N/A'}</p>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Broker ID</label>
+                <p className="mt-1 text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{angelOneProfile.brokerid || 'N/A'}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Last Login</label>
+                <p className="mt-1 text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{angelOneProfile.lastlogintime || 'N/A'}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Enabled Exchanges</label>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {angelOneProfile.exchanges.map(exchange => (
+                    <span key={exchange} className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+                      {exchange}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Enabled Products</label>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {angelOneProfile.products.map(product => (
+                    <span key={product} className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
+                      {product}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

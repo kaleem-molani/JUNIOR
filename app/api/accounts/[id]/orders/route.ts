@@ -4,8 +4,13 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
-export async function GET() {
+// GET /api/accounts/:id/orders
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
@@ -22,32 +27,52 @@ export async function GET() {
       return NextResponse.json({ error: 'Administrators cannot access trading account orders' }, { status: 403 });
     }
 
-    // For now, return mock orders data
-    // In production, this would fetch from the broker API or database
-    const mockOrders = [
-      {
-        id: '1',
-        orderId: 'ORD001',
-        symbol: 'RELIANCE',
-        side: 'BUY',
-        quantity: 10,
-        price: 2500,
-        status: 'EXECUTED',
-        orderDate: new Date().toISOString(),
-      },
-      {
-        id: '2',
-        orderId: 'ORD002',
-        symbol: 'TCS',
-        side: 'SELL',
-        quantity: 5,
-        price: 3200,
-        status: 'PENDING',
-        orderDate: new Date().toISOString(),
-      },
-    ];
+    const accountId = params?.id;
+    if (!accountId) {
+      return NextResponse.json({ error: 'Missing account id' }, { status: 400 });
+    }
 
-    return NextResponse.json(mockOrders);
+    // Verify that the account belongs to the authenticated user
+    const account = await prisma.tradingAccount.findUnique({
+      where: { id: accountId },
+      select: { id: true, userId: true, name: true },
+    });
+
+    if (!account || account.userId !== session.user.id) {
+      return NextResponse.json({ error: 'Account not found or access denied' }, { status: 404 });
+    }
+
+    // Fetch orders from DB and include signal details for richer response
+    const orders = await prisma.order.findMany({
+      where: { accountId: account.id },
+      include: {
+        signal: {
+          select: {
+            symbol: true,
+            quantity: true,
+            action: true,
+            limitPrice: true,
+            broadcastAt: true,
+          },
+        },
+      },
+      orderBy: { executedAt: 'desc' },
+    });
+
+    // Map to response shape expected by the frontend
+    const result = orders.map(o => ({
+      id: o.id,
+      orderId: o.brokerOrderId || o.id,
+      symbol: o.signal?.symbol || 'N/A',
+      side: o.signal?.action || 'BUY',
+      quantity: o.signal?.quantity || 0,
+      price: o.signal?.limitPrice ?? null,
+      status: o.status,
+      orderDate: (o.executedAt || o.signal?.broadcastAt || new Date()).toISOString(),
+      errorMessage: o.errorMessage || null,
+    }));
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Error fetching account orders:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

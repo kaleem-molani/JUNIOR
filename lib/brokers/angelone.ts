@@ -13,23 +13,28 @@ import {
   IOrderService,
   ISymbolService,
   ITransportService,
+  IProfileService,
+  IAngelOneProfile,
 } from './interfaces';
 
 export class AngelOneBroker implements IBroker {
   private authService: IAuthenticationService;
   private orderService: IOrderService;
   private symbolService: ISymbolService;
+  private profileService: IProfileService;
   private transport: ITransportService;
 
   constructor(
     authService: IAuthenticationService,
     orderService: IOrderService,
     symbolService: ISymbolService,
+    profileService: IProfileService,
     transport: ITransportService
   ) {
     this.authService = authService;
     this.orderService = orderService;
     this.symbolService = symbolService;
+    this.profileService = profileService;
     this.transport = transport;
   }
 
@@ -59,6 +64,10 @@ export class AngelOneBroker implements IBroker {
 
   async getSymbolDetails(symbolToken: string, credentials: IBrokerCredentials): Promise<ISymbolDetails> {
     return this.symbolService.getSymbolDetails(symbolToken, credentials);
+  }
+
+  async getProfile(credentials: IBrokerCredentials): Promise<IAngelOneProfile> {
+    return this.profileService.getProfile(credentials);
   }
 
   isAuthenticated(credentials: IBrokerCredentials): boolean {

@@ -8,6 +8,27 @@ export interface UserProfile {
   restrictedSymbols: string[];
 }
 
+export interface AngelOneProfile {
+  id: string;
+  accountId: string;
+  clientcode: string | null;
+  name: string | null;
+  email: string | null;
+  mobileno: string | null;
+  exchanges: string[];
+  products: string[];
+  lastlogintime: string | null;
+  brokerid: string | null;
+  bankname: string | null;
+  bankbranch: string | null;
+  bankaccno: string | null;
+  bankpincode: string | null;
+  dematid: string | null;
+  panno: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ProfileErrors {
   name?: string;
 }
@@ -20,6 +41,7 @@ export function useUserProfile() {
     primaryBroker: '',
     restrictedSymbols: [],
   });
+  const [angelOneProfile, setAngelOneProfile] = useState<AngelOneProfile | null>(null);
   const [profileErrors, setProfileErrors] = useState<ProfileErrors>({});
   const [loading, setLoading] = useState(false);
 
@@ -77,12 +99,34 @@ export function useUserProfile() {
     }
   }, []);
 
+  const fetchAngelOneProfile = useCallback(async (accountName: string) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/auth/angel_one/get-profile?accountName=${encodeURIComponent(accountName)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAngelOneProfile(data.profile);
+        return { success: true, profile: data.profile };
+      } else {
+        const error = await response.json();
+        return { success: false, error: error.error };
+      }
+    } catch (error) {
+      console.error('Error fetching AngelOne profile:', error);
+      return { success: false, error: 'Network error occurred' };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     profile,
+    angelOneProfile,
     profileErrors,
     loading,
     fetchUserProfile,
     updateProfile,
+    fetchAngelOneProfile,
     setProfileErrors,
   };
 }

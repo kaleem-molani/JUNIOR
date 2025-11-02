@@ -48,6 +48,30 @@ export interface ITradeBookEntry {
   tradeDate: string;
 }
 
+export interface IAngelOneProfileData {
+  clientcode: string;
+  name: string;
+  email: string;
+  mobileno: string;
+  exchanges: string[];
+  products: string[];
+  lastlogintime: string;
+  brokerid: string;
+  bankname?: string;
+  bankbranch?: string;
+  bankaccno?: string;
+  bankpincode?: string;
+  dematid?: string;
+  panno?: string;
+}
+
+export interface IAngelOneProfile {
+  status: boolean;
+  message: string;
+  errorcode: string;
+  data: IAngelOneProfileData;
+}
+
 export interface IAngelOneOrderData {
   variety: string;
   tradingsymbol: string;
@@ -58,8 +82,12 @@ export interface IAngelOneOrderData {
   producttype: string;
   duration: string;
   quantity: string;
-  triggerprice: string;
-  price?: string; // Optional for MARKET orders
+  triggerprice?: string;
+  price?: string;
+}
+
+export interface IProfileService {
+  getProfile(credentials: IBrokerCredentials): Promise<IAngelOneProfile>;
 }
 
 export interface IAuthenticationService {
@@ -102,5 +130,6 @@ export interface IBroker {
   cancelOrder(credentials: IBrokerCredentials, orderId: string): Promise<boolean>;
   resolveSymbol(symbol: string, credentials: IBrokerCredentials): Promise<string>;
   getSymbolDetails(symbolToken: string, credentials: IBrokerCredentials): Promise<ISymbolDetails>;
+  getProfile(credentials: IBrokerCredentials): Promise<IAngelOneProfile>;
   isAuthenticated(credentials: IBrokerCredentials): boolean;
 }

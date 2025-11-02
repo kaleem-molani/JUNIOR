@@ -6,6 +6,7 @@ import { AngelOneBroker } from './angelone';
 import { AngelOneAuthService, IAuthStorage } from './auth';
 import { AngelOneOrderService } from './orders';
 import { AngelOneSymbolService } from './symbols';
+import { AngelOneProfileService } from './profile';
 import { HttpTransportService } from './transport';
 import { IBrokerCredentials } from './interfaces';
 import { MockBroker } from './mock-broker';
@@ -253,9 +254,15 @@ export class BrokerFactory {
   }
 
   static createAngelOneBroker(): IBroker {
-    // Check if we're in sandbox mode and should use mock broker
-    if (process.env.SANDBOX_MODE === 'true' || process.env.MOCK_BROKER_API === 'true') {
-      console.log('🏖️ [BrokerFactory] Sandbox mode detected, creating MockBroker');
+    // Determine sandbox/mock flags more explicitly and log them for debugging.
+    const sandboxMode = process.env.SANDBOX_MODE === 'true';
+    const mockApi = process.env.MOCK_BROKER_API === 'true';
+    console.log(`�️ [BrokerFactory] ENV check -> SANDBOX_MODE=${process.env.SANDBOX_MODE} (sandboxMode=${sandboxMode}), MOCK_BROKER_API=${process.env.MOCK_BROKER_API} (mockApi=${mockApi}), NODE_ENV=${process.env.NODE_ENV}`);
+
+    // Only use MockBroker when both sandbox mode and explicit mock API flag are set.
+    // This avoids accidental mock usage when only one flag is present.
+    if (sandboxMode && mockApi) {
+      console.log('🏖️ [BrokerFactory] Sandbox + Mock API enabled, creating MockBroker');
       return this.createMockBroker();
     }
 
@@ -267,11 +274,13 @@ export class BrokerFactory {
     const authService = new AngelOneAuthService(this.transport, this.authStorage);
     const orderService = new AngelOneOrderService(this.transport);
     const symbolService = new AngelOneSymbolService(this.transport);
+    const profileService = new AngelOneProfileService(this.transport);
 
     return new AngelOneBroker(
       authService,
       orderService,
       symbolService,
+      profileService,
       this.transport
     );
   }
