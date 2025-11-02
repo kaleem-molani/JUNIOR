@@ -71,17 +71,33 @@ jobs:
     - name: Build application
       run: npm run build
 
+    - name: Verify build output
+      run: |
+        echo "📦 Build output verification:"
+        ls -la
+        if [ -d ".next" ]; then
+          echo "✅ .next directory exists"
+          ls -la .next/ | head -10
+        else
+          echo "❌ .next directory NOT found"
+          exit 1
+        fi
+
     - name: Create deployment package
       run: |
         mkdir -p deploy
-        cp -r .next deploy/
+        echo "📦 Creating deployment package..."
+        ls -la
+        cp -r .next deploy/ && echo "✅ Copied .next" || echo "❌ Failed to copy .next"
         cp -r public deploy/ 2>/dev/null || echo "No public directory to copy"
-        cp -r prisma deploy/
-        cp package*.json deploy/
-        cp next.config.js deploy/
-        cp tsconfig.json deploy/
-        cp ecosystem.config.js deploy/
-        cp -r scripts deploy/
+        cp -r prisma deploy/ && echo "✅ Copied prisma" || echo "❌ Failed to copy prisma"
+        cp package*.json deploy/ && echo "✅ Copied package files" || echo "❌ Failed to copy package files"
+        cp next.config.js deploy/ && echo "✅ Copied next.config.js" || echo "❌ Failed to copy next.config.js"
+        cp tsconfig.json deploy/ && echo "✅ Copied tsconfig.json" || echo "❌ Failed to copy tsconfig.json"
+        cp ecosystem.config.js deploy/ && echo "✅ Copied ecosystem.config.js" || echo "❌ Failed to copy ecosystem.config.js"
+        cp -r scripts deploy/ && echo "✅ Copied scripts" || echo "❌ Failed to copy scripts"
+        echo "📦 Deployment package contents:"
+        ls -la deploy/
         echo "Deployment package created"
 
     - name: Upload deployment artifact
