@@ -2,28 +2,25 @@ name: Deploy to Lightsail
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [ master, main, develop ]
   pull_request:
     branches: [ master, main ]
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Environment to deploy to'
+      deploy_target:
+        description: 'Deploy to environment'
         required: true
-        default: 'production'
+        default: 'staging'
         type: choice
         options:
-        - production
         - staging
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+        - production
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    if: github.event_name != 'workflow_dispatch' || github.event.inputs.environment != 'production'
+    # Run tests on all pushes and PRs, skip only on production workflow_dispatch
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_target != 'production'
 
     steps:
     - name: Checkout code
@@ -49,10 +46,15 @@ jobs:
       env:
         NODE_ENV: test
 
-  build-and-push:
+  deploy:
     runs-on: ubuntu-latest
+    # Run on master/main pushes, or manual workflow_dispatch
+    if: |
+      (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') ||
+      github.event_name == 'workflow_dispatch'
     needs: test
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    environment: 
+      name: ${{ github.event.inputs.deploy_target || 'staging' }}
 
     steps:
     - name: Checkout code
@@ -79,6 +81,8 @@ jobs:
         cp package*.json deploy/
         cp next.config.js deploy/
         cp tsconfig.json deploy/
+        cp ecosystem.config.js deploy/
+        cp -r scripts deploy/
         echo "Deployment package created"
 
     - name: Upload deployment artifact
@@ -88,18 +92,6 @@ jobs:
         path: deploy/
         retention-days: 1
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-
-    steps:
-    - name: Download deployment artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: deploy-package
-        path: deploy/
-
     - name: Deploy to Lightsail
       uses: appleboy/ssh-action@v1.0.0
       with:
@@ -108,64 +100,69 @@ jobs:
         key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
         port: ${{ secrets.LIGHTSAIL_PORT }}
         script: |
+          # Set deployment target
+          DEPLOY_ENV="${{ github.event.inputs.deploy_target || 'staging' }}"
+          echo "🚀 Deploying to: $DEPLOY_ENV"
+          
           # Navigate to app directory
           cd /home/ubuntu/trading-app
-
-          # Backup current version
+          
+          # Create backup
           echo "📦 Creating backup..."
+          BACKUP_TIME=$(date +%Y%m%d_%H%M%S)
           pm2 stop trading-app || true
-          cp -r .next .next.backup.$(date +%Y%m%d_%H%M%S) || true
-
+          cp -r .next .next.backup.$BACKUP_TIME 2>/dev/null || true
+          
           # Load environment variables
           echo "🔧 Loading environment variables..."
           if [ -f ".env.production" ]; then
               export $(cat .env.production | xargs)
-              echo "✅ Environment variables loaded from .env.production"
+              echo "✅ Loaded .env.production"
           elif [ -f ".env" ]; then
               export $(cat .env | xargs)
-              echo "✅ Environment variables loaded from .env"
+              echo "✅ Loaded .env"
           else
-              echo "⚠️ No environment file found, using system environment variables"
+              echo "⚠️ No environment file found"
           fi
-
-          # Verify DATABASE_URL is set
+          
+          # Verify DATABASE_URL
           if [ -z "$DATABASE_URL" ]; then
-              echo "❌ DATABASE_URL environment variable is not set!"
+              echo "❌ DATABASE_URL not set!"
               exit 1
           fi
-
-          echo "🗄️ Database URL configured: ${DATABASE_URL:0:50}..."
-
-          # Update application code
+          
+          # Update application
           echo "📥 Updating application..."
-          rm -rf .next public prisma
+          rm -rf .next public prisma scripts ecosystem.config.js
           cp -r /tmp/deploy/* .
-
+          
           # Make scripts executable
           chmod +x scripts/*.sh
-
+          
           # Install dependencies
           echo "📦 Installing dependencies..."
           npm ci --production
-
-          # Run database migrations
-          echo "🗄️ Running database migrations..."
+          
+          # Generate Prisma client
+          echo "🗄️ Generating Prisma client..."
           npx prisma generate
-          npx prisma db push --accept-data-loss
-
-          # Health check
-          echo "🔍 Running health check..."
-          timeout 30s npm run build || (echo "❌ Build failed" && exit 1)
-
+          
+          # Run migrations (only on production)
+          if [ "$DEPLOY_ENV" = "production" ]; then
+              echo "🗄️ Running database migrations..."
+              npx prisma db push --accept-data-loss
+          else
+              echo "⏭️ Skipping migrations for $DEPLOY_ENV"
+          fi
+          
           # Start application
           echo "🚀 Starting application..."
-          pm2 start ecosystem.config.js --env production
-
-          # Wait for app to start
+          pm2 start ecosystem.config.js --env $DEPLOY_ENV
+          
+          # Health check
+          echo "🔍 Running health check..."
           sleep 10
-
-          # Verify deployment
-          if curl -f http://localhost:4000/api/health 2>/dev/null; then
+          if curl -f -s http://localhost:4000/api/health > /dev/null; then
             echo "✅ Deployment successful!"
           else
             echo "⚠️ Application started but health check failed"
@@ -196,10 +193,10 @@ jobs:
         port: ${{ secrets.LIGHTSAIL_PORT }}
         script: |
           cd /home/ubuntu/trading-app
-
+          
           # Find latest backup
-          LATEST_BACKUP=$(ls -t .next.backup.* | head -1)
-
+          LATEST_BACKUP=$(ls -t .next.backup.* 2>/dev/null | head -1)
+          
           if [ -n "$LATEST_BACKUP" ]; then
             echo "🔄 Rolling back to $LATEST_BACKUP"
             rm -rf .next
