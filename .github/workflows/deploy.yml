@@ -105,7 +105,14 @@ jobs:
         key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
         port: ${{ secrets.LIGHTSAIL_PORT }}
         scp: |
-          deploy-downloaded/ => /tmp/deploy/
+          deploy-downloaded/ecosystem.config.js => /tmp/deploy/ecosystem.config.js
+          deploy-downloaded/package.json => /tmp/deploy/package.json
+          deploy-downloaded/package-lock.json => /tmp/deploy/package-lock.json
+          deploy-downloaded/next.config.js => /tmp/deploy/next.config.js
+          deploy-downloaded/tsconfig.json => /tmp/deploy/tsconfig.json
+          deploy-downloaded/.next => /tmp/deploy/.next
+          deploy-downloaded/prisma => /tmp/deploy/prisma
+          deploy-downloaded/scripts => /tmp/deploy/scripts
         script: |
           # Set deployment target
           DEPLOY_ENV="${{ github.event.inputs.deploy_target || 'staging' }}"
