@@ -176,9 +176,27 @@ export class SignalQueue {
         throw new Error(`Token validation failed: ${tokenResult.errors.get(job.accountId)}`);
       }
 
-      const credentials = tokenResult.validTokens.get(job.accountId);
+      let credentials = tokenResult.validTokens.get(job.accountId);
+
+      // If no valid credentials, check if token is expired and try to refresh
       if (!credentials) {
-        throw new Error('No valid credentials found for account');
+        console.log('📋 [Signal Queue] No valid credentials found, checking for expired tokens...');
+
+        if (tokenResult.expiredTokens.includes(job.accountId)) {
+          console.log('📋 [Signal Queue] Token expired for account:', job.accountId, '- attempting refresh...');
+
+          // Attempt to refresh the expired token
+          const refreshResult = await BatchTokenManager.refreshExpiredTokens([job.accountId]);
+
+          if (refreshResult.has(job.accountId)) {
+            credentials = refreshResult.get(job.accountId);
+            console.log('✅ [Signal Queue] Token refreshed successfully for account:', job.accountId);
+          } else {
+            throw new Error('Token refresh failed - no valid credentials after refresh attempt');
+          }
+        } else {
+          throw new Error('No valid credentials found for account');
+        }
       }
 
       // Create order request
@@ -192,6 +210,11 @@ export class SignalQueue {
         productType: job.productType,
         exchange: job.exchange,
       };
+
+      // Ensure credentials exist before placing order
+      if (!credentials) {
+        throw new Error('No valid credentials available after token validation/refresh');
+      }
 
       // Place order
       const broker = BrokerFactory.createAngelOneBroker();

@@ -42,12 +42,17 @@ export default function UserPage() {
   const [totp, setTotp] = useState('');
   const [accountSignals, setAccountSignals] = useState<UserSignal[]>([]);
   const [orderBook, setOrderBook] = useState<OrderBookEntry[] | null>(null);
-  const [orderBookError, setOrderBookError] = useState<string | null>(null);
+  const [orderBookError, setOrderBookError] = useState<string | { message: string; code?: string; accountId?: string; accountName?: string } | null>(null);
   const [tradeBook, setTradeBook] = useState<TradeBookEntry[] | null>(null);
-  const [tradeBookError, setTradeBookError] = useState<string | null>(null);
+  const [tradeBookError, setTradeBookError] = useState<string | { message: string; code?: string; accountId?: string; accountName?: string } | null>(null);
   const [loadingSignals, setLoadingSignals] = useState(false);
   const [loadingOrderBook, setLoadingOrderBook] = useState(false);
   const [loadingTradeBook, setLoadingTradeBook] = useState(false);
+
+  // Token regeneration state
+  const [showTokenRegeneration, setShowTokenRegeneration] = useState(false);
+  const [tokenRegenerationAccount, setTokenRegenerationAccount] = useState<{ id: string; name: string } | null>(null);
+  const [regeneratingTokens, setRegeneratingTokens] = useState(false);
 
   const fetchAccounts = useCallback(async () => {
     console.log('📥 [Frontend] Fetching accounts from /api/accounts');
@@ -65,14 +70,6 @@ export default function UserPage() {
           clientCode: acc.clientCode ? '***' : null
         })));
         setAccounts(data);
-        // Auto-select if there's only one account
-        if (data.length === 1) {
-          const account = data[0];
-          setSelectedAccountId(account.id);
-          loadSignals(account.id);
-          loadOrderBook(account);
-          loadTradeBook(account);
-        }
       } else {
         console.log('❌ [Frontend] Failed to load accounts:', response.status);
       }
@@ -83,11 +80,27 @@ export default function UserPage() {
 
   // Load accounts and user profile from DB
   useEffect(() => {
+    console.log('🔍 [User Page] useEffect triggered, session:', session);
+    console.log('🔍 [User Page] session status:', status);
     if (session) {
+      console.log('🔍 [User Page] Calling fetchAccounts and fetchUserProfile');
       fetchAccounts();
       fetchUserProfile();
+    } else {
+      console.log('🔍 [User Page] No session, not fetching data');
     }
-  }, [session, fetchAccounts]);
+  }, [session, status, fetchAccounts]);
+
+  // Auto-select first account when accounts load and user is on data section
+  useEffect(() => {
+    if (accounts.length > 0 && activeSection === 'data' && !selectedAccountId) {
+      const firstAccount = accounts[0];
+      setSelectedAccountId(firstAccount.id);
+      loadSignals(firstAccount.id);
+      loadOrderBook(firstAccount);
+      loadTradeBook(firstAccount);
+    }
+  }, [accounts, activeSection, selectedAccountId]);
 
   const fetchUserProfile = async () => {
     const response = await fetch('/api/accounts/profile');
@@ -262,7 +275,16 @@ export default function UserPage() {
         setOrderBook(data);
       } else {
         const errorData = await response.json();
-        setOrderBookError(errorData.error || 'Failed to load order book');
+        if (errorData.code === 'TOKEN_EXPIRED') {
+          setOrderBookError({
+            message: errorData.error,
+            code: errorData.code,
+            accountId: errorData.accountId,
+            accountName: errorData.accountName
+          });
+        } else {
+          setOrderBookError(errorData.error || 'Failed to load order book');
+        }
         setOrderBook(null);
       }
     } catch (error) {
@@ -286,7 +308,16 @@ export default function UserPage() {
         setTradeBook(data);
       } else {
         const errorData = await response.json();
-        setTradeBookError(errorData.error || 'Failed to load trade book');
+        if (errorData.code === 'TOKEN_EXPIRED') {
+          setTradeBookError({
+            message: errorData.error,
+            code: errorData.code,
+            accountId: errorData.accountId,
+            accountName: errorData.accountName
+          });
+        } else {
+          setTradeBookError(errorData.error || 'Failed to load trade book');
+        }
         setTradeBook(null);
       }
     } catch (error) {
@@ -295,6 +326,130 @@ export default function UserPage() {
       setTradeBook(null);
     } finally {
       setLoadingTradeBook(false);
+    }
+  };
+
+  const regenerateTokensForAccount = (accountId: string, accountName: string) => {
+    setTokenRegenerationAccount({ id: accountId, name: accountName });
+    setShowTokenRegeneration(true);
+  };
+
+  const confirmTokenRegeneration = async () => {
+    if (!tokenRegenerationAccount || !totp.trim()) {
+      addNotification({
+        type: 'error',
+        title: 'Error',
+        message: 'Please enter your TOTP code.',
+      });
+      return;
+    }
+
+    // Validate TOTP format (6 digits)
+    if (!/^\d{6}$/.test(totp.trim())) {
+      addNotification({
+        type: 'error',
+        title: 'Invalid TOTP',
+        message: 'TOTP must be a 6-digit number.',
+      });
+      return;
+    }
+
+    setRegeneratingTokens(true);
+    try {
+      const account = accounts.find(acc => acc.id === tokenRegenerationAccount.id);
+      if (!account) {
+        throw new Error('Account not found');
+      }
+
+      // Validate account has required credentials
+      if (!account.clientCode || !account.apiKey || !account.userPin) {
+        addNotification({
+          type: 'error',
+          title: 'Missing Credentials',
+          message: 'Account is missing required credentials (Client Code, API Key, or PIN).',
+        });
+        setRegeneratingTokens(false);
+        return;
+      }
+
+      const response = await fetch('/api/auth/angel_one/generate/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_code: account.clientCode,
+          client_pin: account.userPin,
+          totp: totp.trim(),
+          apiKey: account.apiKey,
+          accountId: account.id,
+        }),
+      });
+
+      if (response.ok) {
+        console.log('✅ [Frontend] Token regeneration successful');
+        setTotp(''); // Clear TOTP
+        setShowTokenRegeneration(false);
+        setTokenRegenerationAccount(null);
+
+        addNotification({
+          type: 'success',
+          title: 'Tokens Regenerated',
+          message: `Authentication tokens have been successfully regenerated for ${tokenRegenerationAccount.name}.`,
+        });
+
+        // Automatically reload the order book after successful token regeneration
+        loadOrderBook(account);
+        
+        // Refresh the accounts list to show updated token status
+        fetchAccounts();
+      } else {
+        const contentType = response.headers.get('content-type');
+        console.error('❌ [Frontend] Token regeneration failed - initial response info:', {
+          status: response.status,
+          statusText: response.statusText,
+          contentType,
+          url: response.url,
+          ok: response.ok
+        });
+
+        let errorData: { error?: string } = {};
+        try {
+          if (contentType && contentType.includes('application/json')) {
+            const responseText = await response.text();
+            console.error('❌ [Frontend] Raw response text:', responseText);
+            errorData = JSON.parse(responseText);
+            // Check if the response is empty or doesn't have expected fields
+            if (!errorData || (typeof errorData === 'object' && Object.keys(errorData).length === 0)) {
+              console.error('❌ [Frontend] Empty or invalid JSON response');
+              errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+            }
+          } else {
+            // Handle non-JSON responses (including text/plain)
+            const textResponse = await response.text();
+            console.error('❌ [Frontend] Non-JSON response received:', textResponse);
+            errorData = { error: textResponse || `HTTP ${response.status}: ${response.statusText}` };
+          }
+        } catch (jsonError) {
+          console.error('❌ [Frontend] Failed to parse response:', jsonError);
+          errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+        }
+
+        console.error('❌ [Frontend] Final error data:', errorData);
+
+        addNotification({
+          type: 'error',
+          title: 'Token Regeneration Failed',
+          message: errorData.error || `HTTP ${response.status}: ${response.statusText}`,
+        });
+      }
+    } catch (error) {
+      console.error('Token regeneration error:', error);
+      addNotification({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to regenerate tokens. Please try again.',
+      });
+    } finally {
+      setRegeneratingTokens(false);
     }
   };
 
@@ -384,8 +539,24 @@ export default function UserPage() {
       });
 
       console.log('📥 [Frontend] API response status:', response.status);
-      const result = await response.json();
-      console.log('📥 [Frontend] API response data:', result);
+      let result;
+      const contentType = response.headers.get('content-type');
+      console.log('📥 [Frontend] Response content-type:', contentType);
+
+      if (contentType && contentType.includes('application/json')) {
+        result = await response.json();
+        console.log('📥 [Frontend] Parsed JSON response:', result);
+      } else {
+        // Handle plain text responses
+        const textResult = await response.text();
+        console.log('📥 [Frontend] Plain text response:', textResult);
+
+        if (response.ok) {
+          result = { ok: true, message: textResult };
+        } else {
+          result = { ok: false, error: textResult };
+        }
+      }
 
       if (result.ok) {
         console.log('✅ [Frontend] Token generation successful');
@@ -558,7 +729,17 @@ export default function UserPage() {
                   </button>
 
                   <button
-                    onClick={() => setActiveSection('data')}
+                    onClick={() => {
+                      setActiveSection('data');
+                      // Auto-select first account if available and none selected
+                      if (accounts.length > 0 && !selectedAccountId) {
+                        const firstAccount = accounts[0];
+                        setSelectedAccountId(firstAccount.id);
+                        loadSignals(firstAccount.id);
+                        loadOrderBook(firstAccount);
+                        loadTradeBook(firstAccount);
+                      }
+                    }}
                     className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-colors ${
                       activeSection === 'data'
                         ? 'bg-blue-50 text-blue-700 border border-blue-200'
@@ -720,6 +901,19 @@ export default function UserPage() {
                 </div>
               </div>
               <div className="p-6">
+                {/* Debug Information */}
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                  <h4 className="text-sm font-medium text-yellow-800 mb-2">Debug Information</h4>
+                  <div className="text-xs text-yellow-700 space-y-1">
+                    <p>Session Status: {status}</p>
+                    <p>User ID: {session?.user?.id || 'Not logged in'}</p>
+                    <p>User Email: {session?.user?.email || 'Not logged in'}</p>
+                    <p>User Role: {session?.user?.role || 'Not logged in'}</p>
+                    <p>Total Accounts: {accounts.length}</p>
+                    <p>Active Accounts: {accounts.filter(acc => acc.isActive).length}</p>
+                  </div>
+                </div>
+
                 {/* Add Account Form */}
                 <div className="bg-gray-50 rounded-lg p-4 mb-6">
                   <h3 className="text-sm font-medium text-gray-900 mb-4">Add New Account</h3>
@@ -769,34 +963,46 @@ export default function UserPage() {
 
                 {/* Account List */}
                 <div className="space-y-3">
-                  {accounts.map(acc => (
-                    <div key={acc.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                          <div className={`w-3 h-3 rounded-full ${acc.isActive ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                          <div>
-                            <h4 className="font-medium text-gray-900">{acc.name}</h4>
-                            <p className="text-sm text-gray-500 capitalize">{acc.broker}</p>
+                  {accounts.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No Trading Accounts</h3>
+                      <p className="text-gray-500 mb-4">You haven&apos;t added any trading accounts yet. Add your first account to start trading.</p>
+                    </div>
+                  ) : (
+                    accounts.map(acc => (
+                      <div key={acc.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-4">
+                            <div className={`w-3 h-3 rounded-full ${acc.isActive ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                            <div>
+                              <h4 className="font-medium text-gray-900">{acc.name}</h4>
+                              <p className="text-sm text-gray-500 capitalize">{acc.broker}</p>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                          <div className="text-right text-sm text-gray-500">
-                            <p>Last used: {acc.lastUsed ? new Date(acc.lastUsed).toLocaleDateString() : 'Never'}</p>
+                          <div className="flex items-center space-x-3">
+                            <div className="text-right text-sm text-gray-500">
+                              <p>Last used: {acc.lastUsed ? new Date(acc.lastUsed).toLocaleDateString() : 'Never'}</p>
+                            </div>
+                            <button
+                              onClick={() => toggleActive(acc.id)}
+                              className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                                acc.isActive
+                                  ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                                  : 'bg-green-100 text-green-700 hover:bg-green-200'
+                              }`}
+                            >
+                              {acc.isActive ? 'Deactivate' : 'Activate'}
+                            </button>
                           </div>
-                          <button
-                            onClick={() => toggleActive(acc.id)}
-                            className={`inline-flex items-center px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                              acc.isActive
-                                ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                                : 'bg-green-100 text-green-700 hover:bg-green-200'
-                            }`}
-                          >
-                            {acc.isActive ? 'Deactivate' : 'Activate'}
-                          </button>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -908,9 +1114,7 @@ export default function UserPage() {
                 </div>
               </div>
             )}
-
-            {/* Account Data */}
-            {activeSection === 'data' && selectedAccountId && (
+            {activeSection === 'data' && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100">
                   <div className="flex items-center justify-between">
@@ -922,7 +1126,7 @@ export default function UserPage() {
                       </div>
                       <h2 className="text-lg font-semibold text-gray-900">Account Data</h2>
                     </div>
-                <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-3">
                   <label className="text-sm font-medium text-gray-700">Account:</label>
                   <select
                     value={selectedAccountId}
@@ -1000,250 +1204,282 @@ export default function UserPage() {
 
               {/* Tab Content */}
               <div className="tab-content">
-                {activeTab === 'signals' && (
-                  <div>
-                    {loadingSignals ? (
-                      <div className="text-center py-4">Loading signals...</div>
-                    ) : accountSignals.length === 0 ? (
-                      <div className="text-center py-4 text-gray-500">No signals received</div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Signal ID
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Symbol
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Action
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Quantity
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Price
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Date
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Status
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {accountSignals.map((signal, index) => (
-                              <tr key={index}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                  {signal.id || '-'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                  {signal.symbol || '-'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                  {signal.action || '-'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                  {signal.quantity || '-'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                  {signal.limitPrice || '-'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                  {signal.broadcastAt ? new Date(signal.broadcastAt).toLocaleString() : '-'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                  {signal.status || 'Received'}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                {!selectedAccountId ? (
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Select an Account</h3>
+                    <p className="text-gray-500 mb-4">Choose a trading account from the dropdown above to view its data, signals, and trading history.</p>
                   </div>
-                )}
-
-                {activeTab === 'orderbook' && (
-                  <div>
-                    {loadingOrderBook ? (
-                      <div className="text-center py-4">Loading order book...</div>
-                    ) : orderBook !== null ? (
-                      orderBook.length > 0 ? (
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full bg-white border border-gray-300">
-                            <thead>
-                              <tr className="bg-gray-50">
-                                <th className="px-4 py-2 border-b text-left">Order ID</th>
-                                <th className="px-4 py-2 border-b text-left">Symbol</th>
-                                <th className="px-4 py-2 border-b text-left">Side</th>
-                                <th className="px-4 py-2 border-b text-left">Quantity</th>
-                                <th className="px-4 py-2 border-b text-left">Price</th>
-                                <th className="px-4 py-2 border-b text-left">Status</th>
-                                <th className="px-4 py-2 border-b text-left">Date</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {orderBook.map((order, index) => (
-                                <tr key={order.orderId || index} className="hover:bg-gray-50">
-                                  <td className="px-4 py-2 border-b">{order.orderId}</td>
-                                  <td className="px-4 py-2 border-b">{order.symbol}</td>
-                                  <td className="px-4 py-2 border-b">
-                                    <span className={`px-2 py-1 rounded text-xs ${
-                                      order.side === 'BUY' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                    }`}>
-                                      {order.side}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-2 border-b">{order.quantity}</td>
-                                  <td className="px-4 py-2 border-b">{order.price && !isNaN(order.price) ? `₹${order.price.toFixed(2)}` : 'N/A'}</td>
-                                  <td className="px-4 py-2 border-b">
-                                    <span className={`px-2 py-1 rounded text-xs ${
-                                      order.status === 'complete' ? 'bg-green-100 text-green-800' :
-                                      order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                      'bg-gray-100 text-gray-800'
-                                    }`}>
-                                      {order.status}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-2 border-b text-gray-500">{order.orderDate || 'Not available'}</td>
+                ) : (
+                  <>
+                    {activeTab === 'signals' && (
+                      <div>
+                        {loadingSignals ? (
+                          <div className="text-center py-4">Loading signals...</div>
+                        ) : accountSignals.length > 0 ? (
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full bg-white border border-gray-300">
+                              <thead>
+                                <tr className="bg-gray-50">
+                                  <th className="px-6 py-3 border-b text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Symbol</th>
+                                  <th className="px-6 py-3 border-b text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                                  <th className="px-6 py-3 border-b text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                                  <th className="px-6 py-3 border-b text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Limit Price</th>
+                                  <th className="px-6 py-3 border-b text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Broadcast At</th>
+                                  <th className="px-6 py-3 border-b text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        <div className="text-center py-8">
-                          <div className="text-gray-400 mb-2">
-                            <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {accountSignals.map((signal, index) => (
+                                  <tr key={signal.id || index} className="hover:bg-gray-50">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                      {signal.symbol || '-'}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                      {signal.action || '-'}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                      {signal.quantity || '-'}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                      {signal.limitPrice || '-'}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                      {signal.broadcastAt ? new Date(signal.broadcastAt).toLocaleString() : '-'}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                      {signal.status || 'Received'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
-                          <h3 className="text-lg font-medium text-gray-900 mb-1">No Orders Found</h3>
-                          <p className="text-gray-500">This account doesn&apos;t have any orders yet.</p>
-                          <p className="text-sm text-gray-400 mt-2">Orders will appear here once you place trades.</p>
-                        </div>
-                      )
-                    ) : (
-                      <div className="text-center py-4">
-                        <div className="text-red-500 mb-2">Failed to load order book</div>
-                        {orderBookError && (
-                          <div className="text-sm text-gray-600 bg-red-50 p-3 rounded-lg border border-red-200">
-                            <strong>Error:</strong> {orderBookError}
-                            {orderBookError.includes('No authentication data found') && (
-                              <div className="mt-2 text-xs text-blue-600">
-                                💡 <strong>Tip:</strong> You need to generate an authentication token first. Go to the sidebar and enter your TOTP code, then click &quot;Generate Token&quot;.
-                              </div>
-                            )}
+                        ) : (
+                          <div className="text-center py-8">
+                            <div className="text-gray-400 mb-2">
+                              <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-2.828a9 9 0 010-12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707A1 1 0 0111 5.172V18.828a1 1 0 01-1.707.707L5.586 15z" />
+                              </svg>
+                            </div>
+                            <h3 className="text-lg font-medium text-gray-900 mb-1">No Signals Found</h3>
+                            <p className="text-gray-500">This account doesn&apos;t have any signals yet.</p>
+                            <p className="text-sm text-gray-400 mt-2">Signals will appear here when trading signals are broadcast.</p>
                           </div>
                         )}
-                        <div className="mt-4">
-                          <button
-                            onClick={() => {
-                              const selectedAccount = accounts.find(acc => acc.id === selectedAccountId);
-                              if (selectedAccount) {
-                                loadOrderBook(selectedAccount);
-                              }
-                            }}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors font-medium"
-                          >
-                            Retry
-                          </button>
-                        </div>
                       </div>
                     )}
-                  </div>
-                )}
 
-                {activeTab === 'tradebook' && (
-                  <div>
-                    {loadingTradeBook ? (
-                      <div className="text-center py-4">Loading trade book...</div>
-                    ) : tradeBook ? (
-                      tradeBook.length > 0 ? (
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full bg-white border border-gray-300">
-                            <thead>
-                              <tr className="bg-gray-50">
-                                <th className="px-4 py-2 border-b text-left">Trade ID</th>
-                                <th className="px-4 py-2 border-b text-left">Order ID</th>
-                                <th className="px-4 py-2 border-b text-left">Symbol</th>
-                                <th className="px-4 py-2 border-b text-left">Side</th>
-                                <th className="px-4 py-2 border-b text-left">Quantity</th>
-                                <th className="px-4 py-2 border-b text-left">Price</th>
-                                <th className="px-4 py-2 border-b text-left">Date</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {tradeBook.map((trade, index) => (
-                                <tr key={trade.tradeId || index} className="hover:bg-gray-50">
-                                  <td className="px-4 py-2 border-b">{trade.tradeId}</td>
-                                  <td className="px-4 py-2 border-b">{trade.orderId}</td>
-                                  <td className="px-4 py-2 border-b">{trade.symbol}</td>
-                                  <td className="px-4 py-2 border-b">
-                                    <span className={`px-2 py-1 rounded text-xs ${
-                                      trade.side === 'BUY' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                    }`}>
-                                      {trade.side}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-2 border-b">{trade.quantity && trade.quantity > 0 ? trade.quantity : 'N/A'}</td>
-                                  <td className="px-4 py-2 border-b">{trade.price && trade.price > 0 && !isNaN(trade.price) ? `₹${trade.price.toFixed(2)}` : 'N/A'}</td>
-                                  <td className="px-4 py-2 border-b">{trade.tradeDate}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        <div className="text-center py-8">
-                          <div className="text-gray-400 mb-2">
-                            <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                            </svg>
-                          </div>
-                          <h3 className="text-lg font-medium text-gray-900 mb-1">No Trades Found</h3>
-                          <p className="text-gray-500">This account doesn&apos;t have any executed trades yet.</p>
-                          <p className="text-sm text-gray-400 mt-2">Trades will appear here once orders are executed.</p>
-                        </div>
-                      )
-                    ) : (
-                      <div className="text-center py-4">
-                        <div className="text-red-500 mb-2">Failed to load trade book</div>
-                        {tradeBookError && (
-                          <div className="text-sm text-gray-600 bg-red-50 p-3 rounded-lg border border-red-200">
-                            <strong>Error:</strong> {tradeBookError}
-                            {tradeBookError.includes('No authentication data found') && (
-                              <div className="mt-2 text-xs text-blue-600">
-                                💡 <strong>Tip:</strong> You need to generate an authentication token first. Go to the sidebar and enter your TOTP code, then click &quot;Generate Token&quot;.
+                    {activeTab === 'orderbook' && (
+                      <div>
+                        {loadingOrderBook ? (
+                          <div className="text-center py-4">Loading order book...</div>
+                        ) : orderBook !== null ? (
+                          orderBook.length > 0 ? (
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full bg-white border border-gray-300">
+                                <thead>
+                                  <tr className="bg-gray-50">
+                                    <th className="px-4 py-2 border-b text-left">Order ID</th>
+                                    <th className="px-4 py-2 border-b text-left">Symbol</th>
+                                    <th className="px-4 py-2 border-b text-left">Side</th>
+                                    <th className="px-4 py-2 border-b text-left">Quantity</th>
+                                    <th className="px-4 py-2 border-b text-left">Price</th>
+                                    <th className="px-4 py-2 border-b text-left">Status</th>
+                                    <th className="px-4 py-2 border-b text-left">Date</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {orderBook.map((order, index) => (
+                                    <tr key={order.orderId || index} className="hover:bg-gray-50">
+                                      <td className="px-4 py-2 border-b">{order.orderId}</td>
+                                      <td className="px-4 py-2 border-b">{order.symbol}</td>
+                                      <td className="px-4 py-2 border-b">
+                                        <span className={`px-2 py-1 rounded text-xs ${
+                                          order.side === 'BUY' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                        }`}>
+                                          {order.side}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-2 border-b">{order.quantity}</td>
+                                      <td className="px-4 py-2 border-b">{order.price && !isNaN(order.price) ? `₹${order.price.toFixed(2)}` : 'N/A'}</td>
+                                      <td className="px-4 py-2 border-b">
+                                        <span className={`px-2 py-1 rounded text-xs ${
+                                          order.status === 'complete' ? 'bg-green-100 text-green-800' :
+                                          order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                          'bg-gray-100 text-gray-800'
+                                        }`}>
+                                          {order.status}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-2 border-b text-gray-500">{order.orderDate || 'Not available'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="text-center py-8">
+                              <div className="text-gray-400 mb-2">
+                                <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                              </div>
+                              <h3 className="text-lg font-medium text-gray-900 mb-1">No Orders Found</h3>
+                              <p className="text-gray-500">This account doesn&apos;t have any orders yet.</p>
+                              <p className="text-sm text-gray-400 mt-2">Orders will appear here once you place trades.</p>
+                            </div>
+                          )
+                        ) : (
+                          <div className="text-center py-4">
+                            <div className="text-red-500 mb-2">Failed to load order book</div>
+                            {orderBookError && (
+                              <div className="text-sm text-gray-600 bg-red-50 p-3 rounded-lg border border-red-200">
+                                <strong>Error:</strong> {typeof orderBookError === 'string' ? orderBookError : orderBookError.message}
+                                {typeof orderBookError === 'string' && orderBookError.includes('No authentication data found') && (
+                                  <div className="mt-2 text-xs text-blue-600">
+                                    💡 <strong>Tip:</strong> You need to generate an authentication token first. Go to the sidebar and enter your TOTP code, then click &quot;Generate Token&quot;.
+                                  </div>
+                                )}
+                                {typeof orderBookError === 'object' && orderBookError.code === 'TOKEN_EXPIRED' && (
+                                  <div className="mt-3 pt-3 border-t border-red-300">
+                                    <div className="text-xs text-blue-600 mb-2">
+                                      🔄 <strong>Action Required:</strong> Your authentication tokens have expired and need to be regenerated.
+                                    </div>
+                                    <button
+                                      onClick={() => regenerateTokensForAccount(orderBookError.accountId!, orderBookError.accountName!)}
+                                      className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-colors font-medium"
+                                    >
+                                      🔑 Regenerate Tokens
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             )}
+                            <div className="mt-4">
+                              <button
+                                onClick={() => {
+                                  const selectedAccount = accounts.find(acc => acc.id === selectedAccountId);
+                                  if (selectedAccount) {
+                                    loadOrderBook(selectedAccount);
+                                  }
+                                }}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors font-medium"
+                              >
+                                Retry
+                              </button>
+                            </div>
                           </div>
                         )}
-                        <div className="mt-4">
-                          <button
-                            onClick={() => {
-                              const selectedAccount = accounts.find(acc => acc.id === selectedAccountId);
-                              if (selectedAccount) {
-                                loadTradeBook(selectedAccount);
-                              }
-                            }}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors font-medium"
-                          >
-                            Retry
-                          </button>
-                        </div>
                       </div>
                     )}
-                  </div>
+
+                    {activeTab === 'tradebook' && (
+                      <div>
+                        {loadingTradeBook ? (
+                          <div className="text-center py-4">Loading trade book...</div>
+                        ) : tradeBook ? (
+                          tradeBook.length > 0 ? (
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full bg-white border border-gray-300">
+                                <thead>
+                                  <tr className="bg-gray-50">
+                                    <th className="px-4 py-2 border-b text-left">Trade ID</th>
+                                    <th className="px-4 py-2 border-b text-left">Order ID</th>
+                                    <th className="px-4 py-2 border-b text-left">Symbol</th>
+                                    <th className="px-4 py-2 border-b text-left">Side</th>
+                                    <th className="px-4 py-2 border-b text-left">Quantity</th>
+                                    <th className="px-4 py-2 border-b text-left">Price</th>
+                                    <th className="px-4 py-2 border-b text-left">Date</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {tradeBook.map((trade, index) => (
+                                    <tr key={trade.tradeId || index} className="hover:bg-gray-50">
+                                      <td className="px-4 py-2 border-b">{trade.tradeId}</td>
+                                      <td className="px-4 py-2 border-b">{trade.orderId}</td>
+                                      <td className="px-4 py-2 border-b">{trade.symbol}</td>
+                                      <td className="px-4 py-2 border-b">
+                                        <span className={`px-2 py-1 rounded text-xs ${
+                                          trade.side === 'BUY' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                        }`}>
+                                          {trade.side}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-2 border-b">{trade.quantity && trade.quantity > 0 ? trade.quantity : 'N/A'}</td>
+                                      <td className="px-4 py-2 border-b">{trade.price && trade.price > 0 && !isNaN(trade.price) ? `₹${trade.price.toFixed(2)}` : 'N/A'}</td>
+                                      <td className="px-4 py-2 border-b">{trade.tradeDate}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="text-center py-8">
+                              <div className="text-gray-400 mb-2">
+                                <svg className="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                </svg>
+                              </div>
+                              <h3 className="text-lg font-medium text-gray-900 mb-1">No Trades Found</h3>
+                              <p className="text-gray-500">This account doesn&apos;t have any executed trades yet.</p>
+                              <p className="text-sm text-gray-400 mt-2">Trades will appear here once orders are executed.</p>
+                            </div>
+                          )
+                        ) : (
+                          <div className="text-center py-4">
+                            <div className="text-red-500 mb-2">Failed to load trade book</div>
+                            {tradeBookError && (
+                              <div className="text-sm text-gray-600 bg-red-50 p-3 rounded-lg border border-red-200">
+                                <strong>Error:</strong> {typeof tradeBookError === 'string' ? tradeBookError : tradeBookError.message}
+                                {typeof tradeBookError === 'string' && tradeBookError.includes('No authentication data found') && (
+                                  <div className="mt-2 text-xs text-blue-600">
+                                    💡 <strong>Tip:</strong> You need to generate an authentication token first. Go to the sidebar and enter your TOTP code, then click &quot;Generate Token&quot;.
+                                  </div>
+                                )}
+                                {typeof tradeBookError === 'object' && tradeBookError.code === 'TOKEN_EXPIRED' && (
+                                  <div className="mt-3 pt-3 border-t border-red-300">
+                                    <div className="text-xs text-blue-600 mb-2">
+                                      🔄 <strong>Action Required:</strong> Your authentication tokens have expired and need to be regenerated.
+                                    </div>
+                                    <button
+                                      onClick={() => regenerateTokensForAccount(tradeBookError.accountId!, tradeBookError.accountName!)}
+                                      className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-colors font-medium"
+                                    >
+                                      🔑 Regenerate Tokens
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            <div className="mt-4">
+                              <button
+                                onClick={() => {
+                                  const selectedAccount = accounts.find(acc => acc.id === selectedAccountId);
+                                  if (selectedAccount) {
+                                    loadTradeBook(selectedAccount);
+                                  }
+                                }}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors font-medium"
+                              >
+                                Retry
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
           </div>
         )}
+
         </div>
 
         {/* Confirmation Dialog */}
@@ -1280,8 +1516,56 @@ export default function UserPage() {
             </div>
           </div>
         )}
+
+        {/* Token Regeneration Dialog */}
+        {showTokenRegeneration && tokenRegenerationAccount && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+              <h3 className="text-lg font-semibold mb-4">Regenerate Authentication Tokens</h3>
+              <p className="text-gray-600 mb-4">
+                Your authentication tokens for <strong>{tokenRegenerationAccount.name}</strong> have expired.
+                Please enter your TOTP code to regenerate them.
+              </p>
+              <div className="mb-4">
+                <label htmlFor="totp-regeneration" className="block text-sm font-medium text-gray-700 mb-2">
+                  TOTP Code
+                </label>
+                <input
+                  id="totp-regeneration"
+                  type="text"
+                  value={totp}
+                  onChange={(e) => setTotp(e.target.value)}
+                  placeholder="Enter 6-digit TOTP code"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  maxLength={6}
+                  disabled={regeneratingTokens}
+                />
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    setShowTokenRegeneration(false);
+                    setTokenRegenerationAccount(null);
+                    setTotp('');
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"
+                  disabled={regeneratingTokens}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmTokenRegeneration}
+                  disabled={regeneratingTokens || !totp.trim()}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {regeneratingTokens ? 'Regenerating...' : 'Regenerate Tokens'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         </div>
       </div>
     </div>
-  );
+  )
 }

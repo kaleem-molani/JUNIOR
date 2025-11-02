@@ -10,17 +10,26 @@ import { prisma } from '@/lib/prisma';
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return new NextResponse('Unauthorized', {
+      status: 401,
+      headers: { 'Content-Type': 'text/plain' }
+    });
   }
 
   // Super admins cannot generate trading account tokens
   if (session.user.role === 'super_admin') {
-    return NextResponse.json({ error: 'Super administrators cannot generate trading account tokens' }, { status: 403 });
+    return new NextResponse('Super administrators cannot generate trading account tokens', {
+      status: 403,
+      headers: { 'Content-Type': 'text/plain' }
+    });
   }
 
   // Admins cannot generate trading account tokens
   if (session.user.role === 'admin') {
-    return NextResponse.json({ error: 'Administrators cannot generate trading account tokens' }, { status: 403 });
+    return new NextResponse('Administrators cannot generate trading account tokens', {
+      status: 403,
+      headers: { 'Content-Type': 'text/plain' }
+    });
   }
 
   console.log('🔑 [API] ===== TOKEN GENERATION REQUEST START =====');
@@ -52,16 +61,26 @@ export async function POST(request: NextRequest) {
 
     if (!client_code || !client_pin || !totp || !apiKey || !accountId) {
       console.log('❌ [API] Validation failed - missing required fields');
-      const response = NextResponse.json({
-        ok: false,
-        error: "All fields are required: client_code, client_pin, totp, apiKey, accountId"
-      }, { status: 400 });
-      console.log('❌ [API] Validation error response sent');
-      console.log('🔑 [API] ===== TOKEN GENERATION REQUEST END =====');
-      return response;
+      return new NextResponse("All fields are required: client_code, client_pin, totp, apiKey, accountId", {
+        status: 400,
+        headers: { 'Content-Type': 'text/plain' }
+      });
+    }
+
+    // Validate TOTP format (should be 6 digits)
+    if (!/^\d{6}$/.test(totp)) {
+      console.log('❌ [API] Validation failed - invalid TOTP format');
+      return new NextResponse("TOTP must be a 6-digit number", {
+        status: 400,
+        headers: { 'Content-Type': 'text/plain' }
+      });
     }
 
     // Verify that the account belongs to the authenticated user
+    console.log('🔍 [API] Looking up account in database...');
+    console.log('🔍 [API] Account ID from request:', accountId);
+    console.log('🔍 [API] User ID from session:', session.user.id);
+
     const account = await prisma.tradingAccount.findFirst({
       where: {
         id: accountId,
@@ -69,21 +88,33 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    console.log('🔍 [API] Database lookup result:');
+    console.log('🔍 [API] - Account found:', !!account);
+    if (account) {
+      console.log('🔍 [API] - Account ID:', account.id);
+      console.log('🔍 [API] - Account name:', account.name);
+      console.log('🔍 [API] - Client code:', account.clientCode);
+      console.log('🔍 [API] - Is active:', account.isActive);
+      console.log('🔍 [API] - Current access token:', !!account.accessToken);
+      console.log('🔍 [API] - Current refresh token:', !!account.refreshToken);
+    } else {
+      console.log('❌ [API] Account not found in database');
+    }
+
     if (!account) {
       console.log('❌ [API] Account not found or access denied');
-      const response = NextResponse.json({
-        ok: false,
-        error: 'Account not found or access denied'
-      }, { status: 404 });
-      console.log('❌ [API] Access denied response sent');
-      console.log('🔑 [API] ===== TOKEN GENERATION REQUEST END =====');
-      return response;
+      return new NextResponse('Account not found or access denied', {
+        status: 404,
+        headers: { 'Content-Type': 'text/plain' }
+      });
     }
 
     console.log('✅ [API] Account ownership verified');
     console.log('🔑 [API] Creating broker factory...');
     const broker = BrokerFactory.createAngelOneBroker();
-    console.log('✅ [API] Broker created successfully');
+    console.log('✅ [API] Broker created successfully:', !!broker);
+    console.log('✅ [API] Broker type:', typeof broker);
+    console.log('✅ [API] Broker has authenticate method:', typeof broker?.authenticate);
 
     const credentials = {
       clientCode: client_code,
@@ -95,23 +126,76 @@ export async function POST(request: NextRequest) {
     console.log('🔑 [API] Credentials prepared (sensitive data masked)');
 
     console.log('🔑 [API] Calling broker.authenticate()...');
-    const success = await broker.authenticate(credentials, totp, accountId);
-    console.log('🔑 [API] Authentication result:', success);
+    console.log('🔑 [API] Account ID being passed to authenticate:', accountId);
+    console.log('🔑 [API] Account ID type:', typeof accountId);
+    const result = await broker.authenticate(credentials, totp, accountId);
+    console.log('🔑 [API] Authentication result:', result);
+    console.log('🔑 [API] Result type:', typeof result);
+    console.log('🔑 [API] Result keys:', result ? Object.keys(result) : 'N/A');
+    console.log('🔑 [API] Result success:', result?.success);
+    console.log('🔑 [API] Result error:', result?.error);
 
-    if (success) {
+    if (result.success) {
       console.log('✅ [API] Authentication successful - preparing success response');
-      const response = NextResponse.json({ ok: true, message: 'Authentication successful' });
-      console.log('✅ [API] Success response sent');
-      console.log('🔑 [API] ===== TOKEN GENERATION REQUEST END =====');
+
+      // Verify tokens were actually saved to database
+      console.log('🔍 [API] Verifying tokens saved to database...');
+      try {
+        const updatedAccount = await prisma.tradingAccount.findUnique({
+          where: { id: accountId },
+          select: {
+            id: true,
+            name: true,
+            accessToken: true,
+            refreshToken: true,
+            tokenExpiresAt: true,
+            lastUsed: true,
+          },
+        });
+
+        console.log('🔍 [API] Database verification result:');
+        console.log('🔍 [API] - Account found:', !!updatedAccount);
+        if (updatedAccount) {
+          console.log('🔍 [API] - Account ID:', updatedAccount.id);
+          console.log('🔍 [API] - Account name:', updatedAccount.name);
+          console.log('🔍 [API] - Access token saved:', !!updatedAccount.accessToken);
+          console.log('🔍 [API] - Refresh token saved:', !!updatedAccount.refreshToken);
+          console.log('🔍 [API] - Token expires at:', updatedAccount.tokenExpiresAt);
+          console.log('🔍 [API] - Last used:', updatedAccount.lastUsed);
+          console.log('🔍 [API] - Access token length:', updatedAccount.accessToken?.length || 0);
+          console.log('🔍 [API] - Refresh token length:', updatedAccount.refreshToken?.length || 0);
+
+          if (!updatedAccount.accessToken || !updatedAccount.refreshToken) {
+            console.error('❌ [API] CRITICAL: Tokens not found in database after successful authentication!');
+            console.error('❌ [API] This indicates a database storage failure');
+          } else {
+            console.log('✅ [API] Database verification successful - tokens are saved');
+          }
+        } else {
+          console.error('❌ [API] CRITICAL: Account not found in database after authentication!');
+        }
+      } catch (verifyError) {
+        console.error('❌ [API] Failed to verify database state:', verifyError);
+      }
+
+      const response = new NextResponse('Authentication successful', {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain' }
+      });
+      console.log('✅ [API] Success response created');
       return response;
     } else {
       console.log('❌ [API] Authentication failed - preparing error response');
-      const response = NextResponse.json({
-        ok: false,
-        error: 'Authentication failed'
-      }, { status: 400 });
-      console.log('❌ [API] Error response sent');
-      console.log('🔑 [API] ===== TOKEN GENERATION REQUEST END =====');
+      console.log('❌ [API] Raw result.error:', result.error);
+      console.log('❌ [API] result.error type:', typeof result.error);
+      console.log('❌ [API] result.error length:', result.error?.length);
+      const errorMessage = result.error || 'Authentication failed. Please check your credentials and TOTP code.';
+      console.log('❌ [API] Final error message:', errorMessage);
+      const response = new NextResponse(errorMessage, {
+        status: 400,
+        headers: { 'Content-Type': 'text/plain' }
+      });
+      console.log('❌ [API] Error response created');
       return response;
     }
   } catch (error) {
@@ -120,13 +204,9 @@ export async function POST(request: NextRequest) {
     console.error('❌ [API] Error message:', error instanceof Error ? error.message : String(error));
     console.error('❌ [API] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
 
-    const response = NextResponse.json({
-      ok: false,
-      error: error instanceof Error ? error.message : 'Internal server error'
-    }, { status: 500 });
-
-    console.log('❌ [API] Error response sent');
-    console.log('🔑 [API] ===== TOKEN GENERATION REQUEST END =====');
-    return response;
+    return new NextResponse(`Internal server error: ${error instanceof Error ? error.message : 'Unknown error'}`, {
+      status: 500,
+      headers: { 'Content-Type': 'text/plain' }
+    });
   }
 }

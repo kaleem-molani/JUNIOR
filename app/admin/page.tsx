@@ -54,6 +54,13 @@ interface SystemStats {
   averageOrdersPerSignal: number;
 }
 
+interface SchedulerStatus {
+  isRunning: boolean;
+  schedule: string;
+  timezone: string;
+  nextRuns: string[];
+}
+
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const [activeTab, setActiveTab] = useState('broadcast');
@@ -74,7 +81,9 @@ export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [stats, setStats] = useState<SystemStats | null>(null);
+  const [schedulerStatus, setSchedulerStatus] = useState<SchedulerStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const [refreshingTokens, setRefreshingTokens] = useState(false);
 
   // Calculate human-readable time difference
   const getTimeAgo = (dateString: string) => {
@@ -140,6 +149,22 @@ export default function AdminPage() {
     }
   };
 
+  const fetchSchedulerStatus = async () => {
+    try {
+      const response = await fetch('/api/scheduler/status');
+      if (response.ok) {
+        const data = await response.json();
+        setSchedulerStatus(data.scheduler);
+      } else {
+        console.error('Failed to fetch scheduler status');
+        setSchedulerStatus(null);
+      }
+    } catch (error) {
+      console.error('Error fetching scheduler status:', error);
+      setSchedulerStatus(null);
+    }
+  };
+
   const handleBroadcast = async () => {
     if (!symbol.trim()) {
       addNotification({
@@ -197,6 +222,50 @@ export default function AdminPage() {
       });
     } finally {
       setBroadcasting(false);
+    }
+  };
+
+  const handleManualTokenRefresh = async () => {
+    setRefreshingTokens(true);
+    try {
+      const response = await fetch('/api/scheduler/refresh', {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        addNotification({
+          type: 'success',
+          title: 'Token Refresh Completed',
+          message: result.message || 'All expiring tokens have been refreshed successfully.',
+        });
+        // Refresh scheduler status
+        fetchSchedulerStatus();
+      } else {
+        const error = await response.json();
+        addNotification({
+          type: 'error',
+          title: 'Token Refresh Failed',
+          message: error.error || 'Failed to refresh tokens. Please try again.',
+        });
+      }
+    } catch (error) {
+      console.error('Manual token refresh error:', error);
+      addNotification({
+        type: 'error',
+        title: 'Network Error',
+        message: 'Failed to trigger token refresh due to network error.',
+      });
+    } finally {
+      setRefreshingTokens(false);
+    }
+  };
+
+  const handleTabClick = (tabId: string) => {
+    setActiveTab(tabId);
+    // Fetch scheduler status when scheduler tab is selected
+    if (tabId === 'scheduler') {
+      fetchSchedulerStatus();
     }
   };
 
@@ -270,7 +339,7 @@ export default function AdminPage() {
     );
   }
 
-  if (!session || session.user.role !== 'admin') {
+  if (!session || (session.user.role !== 'admin' && session.user.role !== 'super_admin')) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -289,7 +358,8 @@ export default function AdminPage() {
     { id: 'signals', label: 'Signal History', icon: '📊' },
     { id: 'users', label: 'User Management', icon: '👥' },
     // Trading Accounts tab only for super admins
-    ...(session?.user.role === 'super_admin' ? [{ id: 'accounts', label: 'Trading Accounts', icon: '🏦' }] : []),
+    ...(session?.user.role === 'super_admin' as const ? [{ id: 'accounts', label: 'Trading Accounts', icon: '🏦' }] : []),
+    { id: 'scheduler', label: 'Token Scheduler', icon: '⏰' },
     { id: 'stats', label: 'System Stats', icon: '📈' },
   ];
 
@@ -304,7 +374,7 @@ export default function AdminPage() {
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabClick(tab.id)}
                 className={`py-4 px-3 sm:px-6 border-b-2 font-medium text-sm whitespace-nowrap flex-shrink-0 ${
                   activeTab === tab.id
                     ? 'border-blue-500 text-blue-600'
@@ -691,7 +761,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {activeTab === 'accounts' && session?.user.role === 'super_admin' && (
+        {activeTab === 'accounts' && session?.user.role === 'super_admin' as const && (
           <div className="bg-white rounded-lg shadow-sm">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Trading Accounts</h2>
@@ -851,6 +921,82 @@ export default function AdminPage() {
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Avg Orders/Signal</p>
                     <p className="text-2xl font-bold text-gray-900">{stats?.averageOrdersPerSignal || 0}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'scheduler' && (
+          <div className="max-w-4xl">
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">Token Refresh Scheduler</h2>
+                  <p className="text-sm text-gray-600 mt-1">Automated token refresh service for trading accounts</p>
+                </div>
+                <button
+                  onClick={handleManualTokenRefresh}
+                  disabled={refreshingTokens}
+                  className={`px-4 py-2 rounded-md font-medium text-sm transition-colors duration-200 ${
+                    refreshingTokens
+                      ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                >
+                  {refreshingTokens ? '🔄 Refreshing...' : '🔄 Manual Refresh'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-lg font-medium text-gray-900 mb-3">Scheduler Status</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Status:</span>
+                      <span className={`text-sm font-medium ${schedulerStatus?.isRunning ? 'text-green-600' : 'text-red-600'}`}>
+                        {schedulerStatus?.isRunning ? '✅ Running' : '❌ Stopped'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Schedule:</span>
+                      <span className="text-sm font-medium text-gray-900">{schedulerStatus?.schedule || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Timezone:</span>
+                      <span className="text-sm font-medium text-gray-900">{schedulerStatus?.timezone || 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-lg font-medium text-gray-900 mb-3">Next Scheduled Runs</h3>
+                  <div className="space-y-2">
+                    {schedulerStatus?.nextRuns?.map((runTime, index) => (
+                      <div key={index} className="flex items-center">
+                        <span className="text-sm text-gray-600 mr-2">🕐</span>
+                        <span className="text-sm font-medium text-gray-900">{runTime}</span>
+                      </div>
+                    )) || (
+                      <span className="text-sm text-gray-500">No schedule information available</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-blue-800">How it works</h3>
+                    <div className="mt-2 text-sm text-blue-700">
+                      <p>The scheduler automatically refreshes authentication tokens for all trading accounts twice daily (6:00 AM and 6:00 PM IST). It only refreshes tokens that are expired or will expire within 30 minutes.</p>
+                    </div>
                   </div>
                 </div>
               </div>

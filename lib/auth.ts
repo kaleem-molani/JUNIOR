@@ -2,6 +2,7 @@ import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { Role } from '@/lib/types';
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -53,7 +54,7 @@ export const authOptions: NextAuthOptions = {
       if (token) {
         session.user.id = token.sub!;
         session.user.email = token.email!;
-        session.user.role = token.role as string;
+        session.user.role = token.role as Role;
       }
       return session;
     },

@@ -63,7 +63,10 @@ export async function GET(request: NextRequest) {
 
     if (!validCredentials?.accessToken) {
       return NextResponse.json({
-        error: 'Authentication tokens expired. Please regenerate tokens.'
+        error: 'Authentication tokens expired. Please regenerate tokens.',
+        code: 'TOKEN_EXPIRED',
+        accountId: account.id,
+        accountName: account.name
       }, { status: 401 });
     }
 

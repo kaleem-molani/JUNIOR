@@ -1,8 +1,8 @@
 // test-sandbox.ts
 // Test script to verify sandbox mode and mock broker integration
 
-const { BrokerFactory } = require('./lib/brokers/factory');
-const { IBrokerCredentials, IOrderRequest } = require('./lib/brokers/interfaces');
+import { BrokerFactory } from './lib/brokers/factory';
+import { IBrokerCredentials, IOrderRequest } from './lib/brokers/interfaces';
 
 // Set sandbox environment variables
 process.env.SANDBOX_MODE = 'true';

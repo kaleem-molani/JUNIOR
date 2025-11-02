@@ -10,16 +10,6 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Super admins don't have trading profiles
-    if (session.user.role === 'super_admin') {
-      return NextResponse.json({ error: 'Super administrators do not have trading profiles' }, { status: 403 });
-    }
-
-    // Admins don't have trading profiles
-    if (session.user.role === 'admin') {
-      return NextResponse.json({ error: 'Administrators do not have trading profiles' }, { status: 403 });
-    }
-
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
       select: {
@@ -40,6 +30,16 @@ export async function GET() {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    // For admin and super_admin users, set trading-related fields to safe defaults
+    if (user.role === 'admin' || user.role === 'super_admin') {
+      return NextResponse.json({
+        ...user,
+        isExecutionEnabled: false, // Admins cannot execute trades
+        primaryBroker: null,
+        restrictedSymbols: [],
+      });
+    }
+
     return NextResponse.json(user);
   } catch (error) {
     console.error('Error fetching user profile:', error);
@@ -52,16 +52,6 @@ export async function PUT(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Super admins don't have trading profiles to update
-    if (session.user.role === 'super_admin') {
-      return NextResponse.json({ error: 'Super administrators do not have trading profiles to update' }, { status: 403 });
-    }
-
-    // Admins don't have trading profiles to update
-    if (session.user.role === 'admin') {
-      return NextResponse.json({ error: 'Administrators do not have trading profiles to update' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -82,6 +72,12 @@ export async function PUT(request: NextRequest) {
 
     if (restrictedSymbols !== undefined && !Array.isArray(restrictedSymbols)) {
       return NextResponse.json({ error: 'restrictedSymbols must be an array' }, { status: 400 });
+    }
+
+    // For admin and super_admin users, prevent trading-related updates
+    if ((session.user.role === 'admin' || session.user.role === 'super_admin') &&
+        (isExecutionEnabled !== undefined || primaryBroker !== undefined || restrictedSymbols !== undefined)) {
+      return NextResponse.json({ error: 'Administrators cannot modify trading settings' }, { status: 403 });
     }
 
     // Build update data object with only provided fields

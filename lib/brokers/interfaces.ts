@@ -63,7 +63,7 @@ export interface IAngelOneOrderData {
 }
 
 export interface IAuthenticationService {
-  authenticate(credentials: IBrokerCredentials, totp: string, accountId: string): Promise<boolean>;
+  authenticate(credentials: IBrokerCredentials, totp: string, accountId: string): Promise<{ success: boolean; error?: string }>;
   refreshToken(credentials: IBrokerCredentials): Promise<IBrokerCredentials>;
   isAuthenticated(credentials: IBrokerCredentials): boolean;
 }
@@ -95,7 +95,7 @@ export interface ISymbolService {
 }
 
 export interface IBroker {
-  authenticate(credentials: IBrokerCredentials, totp: string, accountId: string): Promise<boolean>;
+  authenticate(credentials: IBrokerCredentials, totp: string, accountId: string): Promise<{ success: boolean; error?: string }>;
   placeOrder(credentials: IBrokerCredentials, order: IOrderRequest): Promise<IOrderResponse>;
   getOrderBook(credentials: IBrokerCredentials): Promise<IOrderBookEntry[]>;
   getTradeBook(credentials: IBrokerCredentials): Promise<ITradeBookEntry[]>;

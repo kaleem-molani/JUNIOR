@@ -33,7 +33,7 @@ export class AngelOneBroker implements IBroker {
     this.transport = transport;
   }
 
-  async authenticate(credentials: IBrokerCredentials, totp: string, accountId: string): Promise<boolean> {
+  async authenticate(credentials: IBrokerCredentials, totp: string, accountId: string): Promise<{ success: boolean; error?: string }> {
     return this.authService.authenticate(credentials, totp, accountId);
   }
 

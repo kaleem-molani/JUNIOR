@@ -5,7 +5,11 @@ import { authOptions } from '@/lib/auth';
 
 export async function GET() {
   const session = await getServerSession(authOptions);
+  console.log('🔍 [API] /api/accounts called');
+  console.log('🔍 [API] Session:', session ? { user: { id: session.user.id, email: session.user.email, role: session.user.role } } : 'null');
+
   if (!session) {
+    console.log('❌ [API] No session found');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -20,12 +24,15 @@ export async function GET() {
   }
 
   try {
+    console.log('🔍 [API] Fetching accounts for userId:', session.user.id);
     const accounts = await prisma.tradingAccount.findMany({
       where: { userId: session.user.id },
     });
+    console.log('🔍 [API] Found accounts:', accounts.length, 'accounts');
+    console.log('🔍 [API] Account details:', accounts.map(a => ({ id: a.id, name: a.name, broker: a.broker })));
     return NextResponse.json(accounts);
   } catch (error) {
-    console.error('Get accounts error:', error);
+    console.error('❌ [API] Get accounts error:', error);
     return NextResponse.json({ error: 'Failed to fetch accounts' }, { status: 500 });
   }
 }

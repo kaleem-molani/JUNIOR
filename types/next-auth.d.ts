@@ -1,22 +1,23 @@
 import NextAuth from 'next-auth';
+import { Role } from '../lib/types';
 
 declare module 'next-auth' {
   interface Session {
     user: {
       id: string;
       email: string;
-      role: string;
+      role: Role;
     };
   }
 
   interface User {
-    role: string;
+    role: Role;
   }
 }
 
 declare module 'next-auth/jwt' {
   interface JWT {
-    role: string;
+    role: Role;
     email?: string;
   }
 }

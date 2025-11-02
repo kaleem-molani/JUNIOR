@@ -9,6 +9,7 @@
     "deploy": "zrok share reserved \"oneclick\"",
     "deploy-full": "start cmd /k \"npm start\" && timeout /t 5 && npm run deploy",
     "refresh-tokens": "tsx scripts/refresh-tokens.ts",
+    "scheduled-token-refresh": "tsx scripts/scheduled-token-refresh.ts",
     "lint": "next lint"
   },
   "prisma": {
@@ -17,10 +18,12 @@
   "dependencies": {
     "@prisma/client": "^5.0.0",
     "@types/bcryptjs": "^3.0.0",
+    "@types/node-cron": "^3.0.11",
     "axios": "^1.13.1",
     "bcryptjs": "^3.0.2",
     "next": "^15.0.0",
     "next-auth": "^4.24.13",
+    "node-cron": "^4.2.1",
     "react": "^18.0.0",
     "react-dom": "^18.0.0"
   },

@@ -63,13 +63,15 @@ export class DatabaseAuthStorage implements IAuthStorage {
     console.log('💾 [DB Auth Storage] Refresh token present:', !!credentials.refreshToken);
     console.log('💾 [DB Auth Storage] Access token length:', credentials.accessToken?.length || 0);
     console.log('💾 [DB Auth Storage] Refresh token length:', credentials.refreshToken?.length || 0);
+    console.log('💾 [DB Auth Storage] Access token preview:', credentials.accessToken ? credentials.accessToken.substring(0, 20) + '...' : 'N/A');
+    console.log('💾 [DB Auth Storage] Refresh token preview:', credentials.refreshToken ? credentials.refreshToken.substring(0, 20) + '...' : 'N/A');
 
     try {
       // Check if the account exists and is active
       console.log('💾 [DB Auth Storage] Checking if account exists...');
       let account = await prisma.tradingAccount.findUnique({
         where: { id: accountId },
-        select: { id: true, name: true, isActive: true },
+        select: { id: true, name: true, isActive: true, accessToken: true, refreshToken: true },
       });
 
       // If not found by ID, try finding by clientCode
@@ -77,11 +79,12 @@ export class DatabaseAuthStorage implements IAuthStorage {
         console.log('💾 [DB Auth Storage] Account not found by ID, trying clientCode...');
         account = await prisma.tradingAccount.findFirst({
           where: { clientCode: accountId },
-          select: { id: true, name: true, isActive: true },
+          select: { id: true, name: true, isActive: true, accessToken: true, refreshToken: true },
         });
       }
 
-      console.log('💾 [DB Auth Storage] Account lookup result:', account);
+      console.log('💾 [DB Auth Storage] Account lookup result:', account ? { id: account.id, name: account.name, isActive: account.isActive } : null);
+      console.log('💾 [DB Auth Storage] Current tokens in DB - access:', !!account?.accessToken, 'refresh:', !!account?.refreshToken);
 
       if (!account) {
         console.log('❌ [DB Auth Storage] Account does not exist in database');
@@ -112,25 +115,48 @@ export class DatabaseAuthStorage implements IAuthStorage {
       // Only update tokens if they are provided
       if (!credentials.accessToken) {
         delete updateData.accessToken;
+        console.log('💾 [DB Auth Storage] Access token not provided, not updating');
       }
       if (!credentials.refreshToken) {
         delete updateData.refreshToken;
+        console.log('💾 [DB Auth Storage] Refresh token not provided, not updating');
       }
 
       console.log('💾 [DB Auth Storage] Update data keys:', Object.keys(updateData));
+      console.log('💾 [DB Auth Storage] Update data preview:', {
+        accessToken: updateData.accessToken ? updateData.accessToken.substring(0, 20) + '...' : null,
+        refreshToken: updateData.refreshToken ? updateData.refreshToken.substring(0, 20) + '...' : null,
+        tokenExpiresAt: updateData.tokenExpiresAt,
+        lastUsed: updateData.lastUsed,
+      });
 
       // Update by account ID - use the actual account.id we found
+      console.log('💾 [DB Auth Storage] Executing database update for account ID:', account.id);
       const result = await prisma.tradingAccount.update({
         where: { id: account.id },
         data: updateData,
+        select: { id: true, name: true, accessToken: true, refreshToken: true, tokenExpiresAt: true, lastUsed: true },
       });
 
       console.log('💾 [DB Auth Storage] Database update successful for account:', result.name);
+      console.log('💾 [DB Auth Storage] Updated record details:');
+      console.log('💾 [DB Auth Storage] - ID:', result.id);
+      console.log('💾 [DB Auth Storage] - Name:', result.name);
+      console.log('💾 [DB Auth Storage] - Access token saved:', !!result.accessToken);
+      console.log('💾 [DB Auth Storage] - Refresh token saved:', !!result.refreshToken);
+      console.log('💾 [DB Auth Storage] - Token expires at:', result.tokenExpiresAt);
+      console.log('💾 [DB Auth Storage] - Last used:', result.lastUsed);
+      console.log('💾 [DB Auth Storage] - Access token length:', result.accessToken?.length || 0);
+      console.log('💾 [DB Auth Storage] - Refresh token length:', result.refreshToken?.length || 0);
 
       console.log('✅ [DB Auth Storage] Authentication data saved to database');
       console.log('💾 [DB Auth Storage] ===== SAVE COMPLETE =====');
     } catch (error) {
       console.error('❌ [DB Auth Storage] Failed to save auth data:', error);
+      console.error('❌ [DB Auth Storage] Error details:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : 'No stack trace',
+      });
       console.log('💾 [DB Auth Storage] ===== SAVE FAILED =====');
       throw error;
     }

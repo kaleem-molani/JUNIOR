@@ -25,30 +25,69 @@ export class HttpTransportService implements ITransportService {
   async post<T>(endpoint: string, data: Record<string, unknown>, headers?: Record<string, string>): Promise<T> {
     const finalHeaders = { ...this.axiosInstance.defaults.headers.common, ...headers };
 
-    console.log('🌐 [Transport] ===== HTTP POST REQUEST =====');
-    console.log('🌐 [Transport] Timestamp:', new Date().toISOString());
-    console.log('🌐 [Transport] Endpoint:', endpoint);
-    console.log('🌐 [Transport] Full URL:', `${this.baseUrl}${endpoint}`);
-    console.log('🌐 [Transport] Request data keys:', Object.keys(data));
-    console.log('🌐 [Transport] Headers:', JSON.stringify(finalHeaders, null, 2));
-    console.log('🌐 [Transport] Timeout:', this.timeout, 'ms');
+    console.log('🌐 [AngelOne Transport] ===== HTTP POST REQUEST =====');
+    console.log('🌐 [AngelOne Transport] Timestamp:', new Date().toISOString());
+    console.log('🌐 [AngelOne Transport] Method: POST');
+    console.log('🌐 [AngelOne Transport] Endpoint:', endpoint);
+    console.log('🌐 [AngelOne Transport] Full URL:', `${this.baseUrl}${endpoint}`);
+
+    // Mask sensitive data in request payload
+    const maskedData = JSON.parse(JSON.stringify(data, (key, value) => {
+      if (key === 'password' || key === 'totp' || key === 'refreshToken' || key === 'jwtToken' || key === 'feedToken') {
+        return value ? '***MASKED***' : value;
+      }
+      if (key === 'clientcode' && typeof value === 'string' && value.length > 4) {
+        return '***' + value.slice(-4);
+      }
+      return value;
+    }));
+
+    console.log('🌐 [AngelOne Transport] Request payload (masked):', JSON.stringify(maskedData, null, 2));
+
+    // Mask sensitive headers
+    const maskedHeaders = JSON.parse(JSON.stringify(finalHeaders, (key, value) => {
+      if (key === 'X-PrivateKey' && typeof value === 'string' && value.length > 4) {
+        return '***' + value.slice(-4);
+      }
+      if (key === 'Authorization' && typeof value === 'string' && value.startsWith('Bearer ')) {
+        return 'Bearer ***' + value.slice(-10);
+      }
+      return value;
+    }));
+
+    console.log('🌐 [AngelOne Transport] Request headers (masked):', JSON.stringify(maskedHeaders, null, 2));
+    console.log('🌐 [AngelOne Transport] Timeout:', this.timeout, 'ms');
 
     try {
       const response: AxiosResponse<T> = await this.axiosInstance.post(endpoint, data, {
         headers: headers || {},
       });
 
-      console.log('🌐 [Transport] ===== HTTP RESPONSE RECEIVED =====');
-      console.log('🌐 [Transport] Response status:', response.status);
-      console.log('🌐 [Transport] Response status text:', response.statusText);
-      console.log('🌐 [Transport] Response data type:', typeof response.data);
-      console.log('🌐 [Transport] Response data keys:', response.data && typeof response.data === 'object' ? Object.keys(response.data) : 'N/A');
-      console.log('🌐 [Transport] Response headers present:', !!response.headers);
+      console.log('🌐 [AngelOne Transport] ===== HTTP RESPONSE RECEIVED =====');
+      console.log('🌐 [AngelOne Transport] Response timestamp:', new Date().toISOString());
+      console.log('🌐 [AngelOne Transport] HTTP Status:', response.status, response.statusText);
+      console.log('🌐 [AngelOne Transport] Response data type:', typeof response.data);
+
+      // Mask sensitive data in response
+      const maskedResponseData = JSON.parse(JSON.stringify(response.data, (key, value) => {
+        if (key === 'jwtToken' || key === 'refreshToken' || key === 'feedToken') {
+          return value ? '***TOKEN_PRESENT***' : '***NO_TOKEN***';
+        }
+        return value;
+      }));
+
+      console.log('🌐 [AngelOne Transport] Response data (masked):', JSON.stringify(maskedResponseData, null, 2));
+      console.log('🌐 [AngelOne Transport] Response headers present:', !!response.headers);
 
       return response.data;
     } catch (error) {
-      console.error('🌐 [Transport] ===== HTTP REQUEST FAILED =====');
-      console.error('🌐 [Transport] Error details:', error);
+      console.error('🌐 [AngelOne Transport] ===== HTTP REQUEST FAILED =====');
+      console.error('🌐 [AngelOne Transport] Error timestamp:', new Date().toISOString());
+      console.error('🌐 [AngelOne Transport] Error details:', error);
+      if (axios.isAxiosError(error) && error.response) {
+        console.error('🌐 [AngelOne Transport] Error response status:', error.response.status);
+        console.error('🌐 [AngelOne Transport] Error response data:', error.response.data);
+      }
       throw this.handleError(error);
     }
   }

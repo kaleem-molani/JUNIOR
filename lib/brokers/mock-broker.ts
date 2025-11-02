@@ -7,14 +7,14 @@ export class MockBroker implements IBroker {
   private static mockOrderIdCounter = 1000000;
   private static executionDelay = 50; // 50ms simulated API delay
 
-  async authenticate(credentials: IBrokerCredentials, totp: string, accountId: string): Promise<boolean> {
+  async authenticate(credentials: IBrokerCredentials, totp: string, accountId: string): Promise<{ success: boolean; error?: string }> {
     console.log(`🔧 [Mock Broker] Authenticating account ${accountId}`);
 
     // Simulate authentication delay
     await this.delay(MockBroker.executionDelay);
 
     // Mock successful authentication
-    return true;
+    return { success: true };
   }
 
   async placeOrder(credentials: IBrokerCredentials, order: IOrderRequest): Promise<IOrderResponse> {
