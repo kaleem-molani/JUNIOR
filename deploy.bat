@@ -1,9 +1,0 @@
-@echo off
-echo Starting the application on port 4000...
-start cmd /k "cd /d %~dp0 && npm start"
-
-echo Waiting for application to start...
-timeout /t 5 /nobreak > nul
-
-echo Starting zrok tunnel...
-npm run deploy
