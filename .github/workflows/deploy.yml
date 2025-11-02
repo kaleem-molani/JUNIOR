@@ -109,6 +109,17 @@ jobs:
           exit 1
         fi
 
+    - name: Upload files to Lightsail
+      uses: appleboy/scp-action@v0.1.4
+      with:
+        host: ${{ secrets.LIGHTSAIL_HOST }}
+        username: ${{ secrets.LIGHTSAIL_USER }}
+        key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+        port: ${{ secrets.LIGHTSAIL_PORT }}
+        source: "deploy-downloaded/*"
+        target: "/tmp/deploy/"
+        strip_components: 1
+
     - name: Deploy to Lightsail
       uses: appleboy/ssh-action@v1.0.0
       with:
@@ -117,18 +128,6 @@ jobs:
         key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
         port: ${{ secrets.LIGHTSAIL_PORT }}
         script: |
-          # Create deployment directory
-          mkdir -p /tmp/deploy
-          echo "📁 Created /tmp/deploy directory"
-        scp: |
-          deploy-downloaded/ecosystem.config.js => /tmp/deploy/ecosystem.config.js
-          deploy-downloaded/package.json => /tmp/deploy/package.json
-          deploy-downloaded/package-lock.json => /tmp/deploy/package-lock.json
-          deploy-downloaded/next.config.js => /tmp/deploy/next.config.js
-          deploy-downloaded/tsconfig.json => /tmp/deploy/tsconfig.json
-          deploy-downloaded/.next => /tmp/deploy/.next
-          deploy-downloaded/prisma => /tmp/deploy/prisma
-          deploy-downloaded/scripts => /tmp/deploy/scripts
           # Set deployment target
           DEPLOY_ENV="${{ github.event.inputs.deploy_target || 'staging' }}"
           echo "🚀 Deploying to: $DEPLOY_ENV"
