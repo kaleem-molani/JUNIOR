@@ -1,0 +1,211 @@
+name: Deploy to Lightsail
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+        - staging
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.environment != 'production'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run linting
+      run: npm run lint
+
+    - name: Build application
+      run: npm run build
+
+    - name: Run API tests
+      run: npx tsx test/test-api-endpoints.ts
+      env:
+        NODE_ENV: test
+
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build application
+      run: npm run build
+
+    - name: Create deployment package
+      run: |
+        mkdir -p deploy
+        cp -r .next deploy/
+        cp -r public deploy/
+        cp -r prisma deploy/
+        cp package*.json deploy/
+        cp next.config.js deploy/
+        cp tsconfig.json deploy/
+        echo "Deployment package created"
+
+    - name: Upload deployment artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: deploy-package
+        path: deploy/
+        retention-days: 1
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+
+    steps:
+    - name: Download deployment artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: deploy-package
+        path: deploy/
+
+    - name: Deploy to Lightsail
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.LIGHTSAIL_HOST }}
+        username: ${{ secrets.LIGHTSAIL_USER }}
+        key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+        port: ${{ secrets.LIGHTSAIL_PORT }}
+        script: |
+          # Navigate to app directory
+          cd /home/ubuntu/trading-app
+
+          # Backup current version
+          echo "📦 Creating backup..."
+          pm2 stop trading-app || true
+          cp -r .next .next.backup.$(date +%Y%m%d_%H%M%S) || true
+
+          # Load environment variables
+          echo "🔧 Loading environment variables..."
+          if [ -f ".env.production" ]; then
+              export $(cat .env.production | xargs)
+              echo "✅ Environment variables loaded from .env.production"
+          elif [ -f ".env" ]; then
+              export $(cat .env | xargs)
+              echo "✅ Environment variables loaded from .env"
+          else
+              echo "⚠️ No environment file found, using system environment variables"
+          fi
+
+          # Verify DATABASE_URL is set
+          if [ -z "$DATABASE_URL" ]; then
+              echo "❌ DATABASE_URL environment variable is not set!"
+              exit 1
+          fi
+
+          echo "🗄️ Database URL configured: ${DATABASE_URL:0:50}..."
+
+          # Update application code
+          echo "📥 Updating application..."
+          rm -rf .next public prisma
+          cp -r /tmp/deploy/* .
+
+          # Make scripts executable
+          chmod +x scripts/*.sh
+
+          # Install dependencies
+          echo "📦 Installing dependencies..."
+          npm ci --production
+
+          # Run database migrations
+          echo "🗄️ Running database migrations..."
+          npx prisma generate
+          npx prisma db push --accept-data-loss
+
+          # Health check
+          echo "🔍 Running health check..."
+          timeout 30s npm run build || (echo "❌ Build failed" && exit 1)
+
+          # Start application
+          echo "🚀 Starting application..."
+          pm2 start ecosystem.config.js --env production
+
+          # Wait for app to start
+          sleep 10
+
+          # Verify deployment
+          if curl -f http://localhost:4000/api/health 2>/dev/null; then
+            echo "✅ Deployment successful!"
+          else
+            echo "⚠️ Application started but health check failed"
+          fi
+
+    - name: Notify deployment status
+      if: always()
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        fields: repo,message,commit,author,action,eventName,ref,workflow
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+  rollback:
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: failure() && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+
+    steps:
+    - name: Rollback deployment
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.LIGHTSAIL_HOST }}
+        username: ${{ secrets.LIGHTSAIL_USER }}
+        key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+        port: ${{ secrets.LIGHTSAIL_PORT }}
+        script: |
+          cd /home/ubuntu/trading-app
+
+          # Find latest backup
+          LATEST_BACKUP=$(ls -t .next.backup.* | head -1)
+
+          if [ -n "$LATEST_BACKUP" ]; then
+            echo "🔄 Rolling back to $LATEST_BACKUP"
+            rm -rf .next
+            cp -r $LATEST_BACKUP .next
+            pm2 start ecosystem.config.js --env production
+            echo "✅ Rollback completed"
+          else
+            echo "❌ No backup found for rollback"
+          fi
