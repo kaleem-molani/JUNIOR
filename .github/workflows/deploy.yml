@@ -52,90 +52,10 @@ jobs:
       (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') ||
       github.event_name == 'workflow_dispatch'
     needs: test
-    environment: 
+    environment:
       name: ${{ github.event.inputs.deploy_target || 'staging' }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Build application
-      run: npm run build
-
-    - name: Verify build output
-      run: |
-        echo "📦 Build output verification:"
-        ls -la
-        if [ -d ".next" ]; then
-          echo "✅ .next directory exists"
-          ls -la .next/ | head -10
-        else
-          echo "❌ .next directory NOT found"
-          exit 1
-        fi
-
-    - name: Create deployment package
-      run: |
-        mkdir -p deploy
-        echo "📦 Creating deployment package..."
-        ls -la
-        cp -r .next deploy/ && echo "✅ Copied .next" || echo "❌ Failed to copy .next"
-        cp -r public deploy/ 2>/dev/null || echo "No public directory to copy"
-        cp -r prisma deploy/ && echo "✅ Copied prisma" || echo "❌ Failed to copy prisma"
-        cp package*.json deploy/ && echo "✅ Copied package files" || echo "❌ Failed to copy package files"
-        cp next.config.js deploy/ && echo "✅ Copied next.config.js" || echo "❌ Failed to copy next.config.js"
-        cp tsconfig.json deploy/ && echo "✅ Copied tsconfig.json" || echo "❌ Failed to copy tsconfig.json"
-        cp ecosystem.config.js deploy/ && echo "✅ Copied ecosystem.config.js" || echo "❌ Failed to copy ecosystem.config.js"
-        cp -r scripts deploy/ && echo "✅ Copied scripts" || echo "❌ Failed to copy scripts"
-        echo "📦 Deployment package contents:"
-        ls -la deploy/
-        echo "Deployment package created"
-
-    - name: Upload deployment artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: deploy-package
-        path: deploy/
-        retention-days: 1
-
-    - name: Download deployment artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: deploy-package
-        path: deploy-downloaded/
-
-    - name: Verify deployment files
-      run: |
-        echo "📦 Contents of deploy-downloaded/:"
-        ls -la deploy-downloaded/
-        echo "📦 Checking for ecosystem.config.js:"
-        if [ -f "deploy-downloaded/ecosystem.config.js" ]; then
-          echo "✅ ecosystem.config.js found in deploy-downloaded/"
-        else
-          echo "❌ ecosystem.config.js NOT found in deploy-downloaded/"
-          exit 1
-        fi
-
-    - name: Upload files to Lightsail
-      uses: appleboy/scp-action@v0.1.4
-      with:
-        host: ${{ secrets.LIGHTSAIL_HOST }}
-        username: ${{ secrets.LIGHTSAIL_USER }}
-        key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-        port: ${{ secrets.LIGHTSAIL_PORT }}
-        source: "deploy-downloaded/*"
-        target: "/tmp/deploy/"
-        strip_components: 1
-
     - name: Deploy to Lightsail
       uses: appleboy/ssh-action@v1.0.0
       with:
@@ -147,16 +67,23 @@ jobs:
           # Set deployment target
           DEPLOY_ENV="${{ github.event.inputs.deploy_target || 'staging' }}"
           echo "🚀 Deploying to: $DEPLOY_ENV"
-          
+
           # Navigate to app directory
           cd /home/ubuntu/trading-app
-          
-          # Create backup
+
+          # Backup current deployment
           echo "📦 Creating backup..."
           BACKUP_TIME=$(date +%Y%m%d_%H%M%S)
-          pm2 stop trading-app || true
-          cp -r .next .next.backup.$BACKUP_TIME 2>/dev/null || true
-          
+          if [ -d ".next" ]; then
+            cp -r .next .next.backup.$BACKUP_TIME 2>/dev/null || true
+            echo "✅ Backup created: .next.backup.$BACKUP_TIME"
+          fi
+
+          # Pull latest code from Git
+          echo "📥 Pulling latest code..."
+          git pull origin ${{ github.ref_name }} || git pull origin main || git pull origin master
+          echo "✅ Code updated"
+
           # Securely create environment file
           echo "🔧 Setting up environment variables..."
           cat > .env.production << EOF
@@ -170,83 +97,66 @@ jobs:
           SKIP_REAL_TRADING=false
           PORT=4000
           EOF
-          
+
           # Set permissions for env file
           chmod 600 .env.production
-          
-          # Export environment variables for current session
-          export DATABASE_URL="${{ secrets.DATABASE_URL_PRODUCTION }}"
-          export NEXTAUTH_SECRET="${{ secrets.NEXTAUTH_SECRET }}"
-          export NEXTAUTH_URL="https://yourdomain.com"
-          export NODE_ENV="production"
-          export APP_ENV="production"
-          
-          # Verify DATABASE_URL is set (without exposing it)
-          if [ -z "$DATABASE_URL" ]; then
-              echo "❌ DATABASE_URL not set!"
-              exit 1
-          fi
-          
-          echo "✅ Database configuration loaded securely"
-          
-          # Update application
-          echo "📥 Updating application..."
-          rm -rf .next public prisma scripts ecosystem.config.js
-          
-          # List files in deployment package for debugging
-          echo "📦 Files in deployment package:"
-          ls -la /tmp/deploy/
-          
-          # Copy files explicitly
-          cp -r /tmp/deploy/.next . 2>/dev/null || echo "No .next directory"
-          cp -r /tmp/deploy/public . 2>/dev/null || echo "No public directory"
-          cp -r /tmp/deploy/prisma . 2>/dev/null || echo "No prisma directory"
-          cp -r /tmp/deploy/scripts . 2>/dev/null || echo "No scripts directory"
-          cp /tmp/deploy/package.json . 2>/dev/null || echo "No package.json"
-          cp /tmp/deploy/package-lock.json . 2>/dev/null || echo "No package-lock.json"
-          cp /tmp/deploy/next.config.js . 2>/dev/null || echo "No next.config.js"
-          cp /tmp/deploy/tsconfig.json . 2>/dev/null || echo "No tsconfig.json"
-          cp /tmp/deploy/ecosystem.config.js . 2>/dev/null || echo "No ecosystem.config.js"
-          
-          # Verify ecosystem.config.js exists
-          if [ -f "ecosystem.config.js" ]; then
-              echo "✅ ecosystem.config.js found"
-          else
-              echo "❌ ecosystem.config.js not found after copy"
-              ls -la
-              exit 1
-          fi
-          
-          # Make scripts executable
-          chmod +x scripts/*.sh
-          
+          echo "✅ Environment configured"
+
           # Install dependencies
           echo "📦 Installing dependencies..."
           npm ci --production
-          
+          echo "✅ Dependencies installed"
+
           # Generate Prisma client
-          echo "🗄️ Generating Prisma client..."
+          echo "�️ Generating Prisma client..."
           npx prisma generate
-          
+          echo "✅ Prisma client generated"
+
+          # Build the application
+          echo "🔨 Building application..."
+          npm run build
+          echo "✅ Application built"
+
+          # Verify build output
+          if [ -d ".next" ]; then
+            echo "✅ .next directory exists after build"
+            ls -la .next/ | head -5
+          else
+            echo "❌ .next directory NOT found after build"
+            exit 1
+          fi
+
           # Run migrations (only on production)
           if [ "$DEPLOY_ENV" = "production" ]; then
               echo "🗄️ Running database migrations..."
               npx prisma db push --accept-data-loss
+              echo "✅ Migrations completed"
           else
               echo "⏭️ Skipping migrations for $DEPLOY_ENV"
           fi
-          
-          # Start application
+
+          # Stop current application
+          echo "🛑 Stopping current application..."
+          pm2 stop trading-app || true
+          pm2 delete trading-app || true
+          echo "✅ Application stopped"
+
+          # Start new application
           echo "🚀 Starting application..."
           pm2 start ecosystem.config.js --env $DEPLOY_ENV
-          
+          pm2 save
+          echo "✅ Application started"
+
           # Health check
           echo "🔍 Running health check..."
-          sleep 10
+          sleep 15
           if curl -f -s http://localhost:4000/api/health > /dev/null; then
             echo "✅ Deployment successful!"
+            echo "🌐 Application is running at: http://localhost:4000"
           else
             echo "⚠️ Application started but health check failed"
+            pm2 logs trading-app --lines 20
+            exit 1
           fi
 
   rollback:
