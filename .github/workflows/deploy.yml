@@ -104,7 +104,6 @@ jobs:
         username: ${{ secrets.LIGHTSAIL_USER }}
         key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
         port: ${{ secrets.LIGHTSAIL_PORT }}
-        envs: DATABASE_URL,NEXTAUTH_SECRET
         scp: |
           deploy-downloaded/ => /tmp/deploy/
         script: |
@@ -126,7 +125,7 @@ jobs:
           cat > .env.production << EOF
           DATABASE_URL=${{ secrets.DATABASE_URL_PRODUCTION }}
           NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
-          NEXTAUTH_URL=https://yourdomain.com
+          NEXTAUTH_URL=http://juniorinfo.in/
           NODE_ENV=production
           APP_ENV=production
           SANDBOX_MODE=false
