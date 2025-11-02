@@ -155,7 +155,30 @@ jobs:
           # Update application
           echo "📥 Updating application..."
           rm -rf .next public prisma scripts ecosystem.config.js
-          cp -r /tmp/deploy/* .
+          
+          # List files in deployment package for debugging
+          echo "📦 Files in deployment package:"
+          ls -la /tmp/deploy/
+          
+          # Copy files explicitly
+          cp -r /tmp/deploy/.next . 2>/dev/null || echo "No .next directory"
+          cp -r /tmp/deploy/public . 2>/dev/null || echo "No public directory"
+          cp -r /tmp/deploy/prisma . 2>/dev/null || echo "No prisma directory"
+          cp -r /tmp/deploy/scripts . 2>/dev/null || echo "No scripts directory"
+          cp /tmp/deploy/package.json . 2>/dev/null || echo "No package.json"
+          cp /tmp/deploy/package-lock.json . 2>/dev/null || echo "No package-lock.json"
+          cp /tmp/deploy/next.config.js . 2>/dev/null || echo "No next.config.js"
+          cp /tmp/deploy/tsconfig.json . 2>/dev/null || echo "No tsconfig.json"
+          cp /tmp/deploy/ecosystem.config.js . 2>/dev/null || echo "No ecosystem.config.js"
+          
+          # Verify ecosystem.config.js exists
+          if [ -f "ecosystem.config.js" ]; then
+              echo "✅ ecosystem.config.js found"
+          else
+              echo "❌ ecosystem.config.js not found after copy"
+              ls -la
+              exit 1
+          fi
           
           # Make scripts executable
           chmod +x scripts/*.sh
