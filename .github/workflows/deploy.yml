@@ -42,6 +42,20 @@ jobs:
     - name: Build application
       run: npm run build
 
+    - name: Start application server
+      run: npm run dev &
+      env:
+        NODE_ENV: test
+        DATABASE_URL: "postgresql://test:test@localhost:5432/test_db"
+        NEXTAUTH_SECRET: "test-secret-for-ci"
+        NEXTAUTH_URL: "http://localhost:4000"
+
+    - name: Wait for server to be ready
+      run: |
+        timeout 60 bash -c 'until curl -f http://localhost:4000/api/health > /dev/null 2>&1; do sleep 2; done'
+      env:
+        NODE_ENV: test
+
     - name: Run API tests
       run: npx tsx test/test-api-endpoints.ts
       env:

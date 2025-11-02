@@ -2,7 +2,7 @@
 // Test script for API endpoints
 
 async function testAPIEndpoints() {
-  const baseUrl = 'http://localhost:3000';
+  const baseUrl = 'http://localhost:4000';
 
   console.log('🧪 [API TEST] Testing instrument API endpoints...\n');
 
