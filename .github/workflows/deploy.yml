@@ -75,7 +75,7 @@ jobs:
       run: |
         mkdir -p deploy
         cp -r .next deploy/
-        cp -r public deploy/
+        cp -r public deploy/ 2>/dev/null || echo "No public directory to copy"
         cp -r prisma deploy/
         cp package*.json deploy/
         cp next.config.js deploy/
