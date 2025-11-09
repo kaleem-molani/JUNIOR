@@ -68,8 +68,8 @@ jobs:
           DEPLOY_ENV="${{ github.event.inputs.deploy_target || 'staging' }}"
           echo "🚀 Deploying to: $DEPLOY_ENV"
 
-          # Navigate to app directory
-          cd /home/ubuntu/trading-app
+          # Navigate to app directory 
+          cd /home/bitnami/trading-app
 
           # Backup current deployment
           echo "📦 Creating backup..."
@@ -187,7 +187,7 @@ jobs:
         key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
         port: ${{ secrets.LIGHTSAIL_PORT }}
         script: |
-          cd /home/ubuntu/trading-app
+          cd /home/bitnami/trading-app
           
           # Find latest backup
           LATEST_BACKUP=$(ls -t .next.backup.* 2>/dev/null | head -1)

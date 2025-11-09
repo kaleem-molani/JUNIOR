@@ -26,9 +26,9 @@ sudo apt install -y nodejs npm postgresql-client git curl unzip
 sudo npm install -g pm2
 
 # Create application directory
-sudo mkdir -p /home/ubuntu/trading-app
-sudo chown ubuntu:ubuntu /home/ubuntu/trading-app
-cd /home/ubuntu/trading-app
+sudo mkdir -p /home/bitnami/trading-app
+sudo chown bitnami:bitnami /home/bitnami/trading-app
+cd /home/bitnami/trading-app
 
 # Clone repository
 git clone https://github.com/yourusername/your-repo.git .
@@ -39,7 +39,7 @@ git clone https://github.com/yourusername/your-repo.git .
 Create production environment file on your server:
 
 ```bash
-cd /home/ubuntu/trading-app
+cd /home/bitnami/trading-app
 cp .env.production.example .env.production
 nano .env.production
 ```
@@ -147,7 +147,7 @@ In your GitHub repository, go to Settings → Secrets and variables → Actions 
 
 ### Required Secrets:
 - `LIGHTSAIL_HOST` - Your Lightsail instance IP address
-- `LIGHTSAIL_USER` - Usually `ubuntu`
+- `LIGHTSAIL_USER` - Usually `bitnami` (for Bitnami stack)
 - `LIGHTSAIL_SSH_KEY` - Private SSH key (generate with `ssh-keygen`)
 - `LIGHTSAIL_PORT` - Usually `22`
 
@@ -213,7 +213,7 @@ curl http://localhost:4000/api/health
 ### View Deployment Logs
 ```bash
 # GitHub Actions logs in repository Actions tab
-# Server logs in /home/ubuntu/trading-app/logs/
+# Server logs in /home/bitnami/trading-app/logs/
 ```
 
 ### Rollback Deployment
@@ -226,7 +226,7 @@ npm run rollback
 ### Environment Variable Issues
 ```bash
 # Check if environment variables are loaded
-cd /home/ubuntu/trading-app
+cd /home/bitnami/trading-app
 cat .env.production
 
 # Test database connection
@@ -261,7 +261,7 @@ pm2 restart trading-app
 ### Rollback Issues
 ```bash
 # Check available backups
-ls -la /home/ubuntu/trading-app/backups/
+ls -la /home/bitnami/trading-app/backups/
 
 # Manual rollback
 npm run rollback
