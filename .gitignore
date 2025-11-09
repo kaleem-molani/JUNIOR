@@ -33,3 +33,25 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# Next.js backup directories
+.next.backup.*
+
+# Environment files
+.env.production
+
+# Log files
+logs/
+
+# SSL and nginx config files
+bitnami-ssl-safe.conf
+maintenance.html
+
+# Scripts
+setup-nginx.sh
+setup-ssl.sh
+
+# PM2 config backups
+ecosystem.config.safe.js
+
+# API backups
+*.backup
