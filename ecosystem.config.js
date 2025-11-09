@@ -2,6 +2,7 @@ module.exports = {
   apps: [{
     name: 'trading-app',
     script: 'npm start',
+    cwd: '/home/bitnami/trading-app',
     instances: 1,
     autorestart: true,
     watch: false,

@@ -155,6 +155,11 @@ jobs:
           pm2 delete trading-app || true
           echo "✅ Application stopped"
 
+          # Create logs directory
+          echo "📁 Creating logs directory..."
+          mkdir -p logs
+          echo "✅ Logs directory created"
+
           # Start new application
           echo "🚀 Starting application..."
           pm2 start ecosystem.config.js --env $DEPLOY_ENV
