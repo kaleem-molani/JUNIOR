@@ -2,6 +2,8 @@
 
 A scalable trading application built with Next.js that enables users to connect their Angel One trading accounts and receive automated trading signals.
 
+<!-- CI/CD Pipeline Test - 2025-11-09 -->
+
 ## Getting Started
 
 First, install dependencies:
@@ -266,4 +268,4 @@ Fill in the following fields:
 
 ---
 
-*Last updated: October 30, 2025*"# JUNIOR" 
+*Last updated: October 30, 2025*
