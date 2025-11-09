@@ -97,6 +97,17 @@ export class InstrumentService {
           });
         }
 
+        // Debug IDEA-EQ specifically
+        if (instrument.symbol === 'IDEA-EQ' || item.symbol === 'IDEA-EQ' || item.tradingsymbol === 'IDEA-EQ') {
+          console.log('🔍 [Instrument Service] Found IDEA-EQ at index', index, ':', {
+            raw: item,
+            processed: instrument,
+            token: item.token || item.instrument_token || item.symboltoken,
+            symbol: item.symbol || item.tradingsymbol || item.name,
+            exchange: item.exch_seg || item.exchange || item.exch,
+          });
+        }
+
         return instrument;
       }).filter(instrument => {
         // Skip instruments with empty tokens
@@ -157,7 +168,7 @@ export class InstrumentService {
       });
     });
 
-    const batchSize = 100; // Process in batches to avoid memory issues
+    const batchSize = 10; // Reduced batch size to ensure no instruments are missed
     let processed = 0;
 
     for (let i = 0; i < instruments.length; i += batchSize) {
@@ -170,6 +181,15 @@ export class InstrumentService {
           // Debug YESBANK in batch
           if (instrument.symbol === 'YESBANK' || instrument.symbol === 'YESBANK-EQ') {
             console.log('🔍 [Instrument Service] Processing YESBANK in batch:', {
+              token: instrument.token,
+              symbol: instrument.symbol,
+              exch_seg: instrument.exch_seg,
+            });
+          }
+
+          // Debug IDEA-EQ in batch
+          if (instrument.symbol === 'IDEA-EQ') {
+            console.log('🔍 [Instrument Service] Processing IDEA-EQ in batch:', {
               token: instrument.token,
               symbol: instrument.symbol,
               exch_seg: instrument.exch_seg,
