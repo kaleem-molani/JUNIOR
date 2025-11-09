@@ -153,6 +153,7 @@ jobs:
           echo "🛑 Stopping current application..."
           pm2 stop trading-app || true
           pm2 delete trading-app || true
+          sleep 2  # Give PM2 time to fully stop
           echo "✅ Application stopped"
 
           # Create logs directory
@@ -160,23 +161,67 @@ jobs:
           mkdir -p logs
           echo "✅ Logs directory created"
 
+          # Check available memory before starting
+          echo "💾 Checking system resources..."
+          free -h || echo "Memory check not available"
+          df -h / | grep -E "^/dev" || echo "Disk check not available"
+
+          # Check if port 4000 is available
+          echo "🔍 Checking port 4000 availability..."
+          if lsof -i :4000 >/dev/null 2>&1; then
+            echo "⚠️ Port 4000 is in use, attempting to free it..."
+            fuser -k 4000/tcp || true
+            sleep 2
+          else
+            echo "✅ Port 4000 is available"
+          fi
+
           # Start new application
           echo "🚀 Starting application..."
           pm2 start ecosystem.config.js --env $DEPLOY_ENV
+          sleep 5  # Give app more time to start
+
+          # Check if application started successfully
+          if pm2 list | grep -q "trading-app.*online"; then
+            echo "✅ Application started successfully"
+            pm2 logs trading-app --lines 5
+          else
+            echo "❌ Application failed to start"
+            pm2 logs trading-app --lines 20 || true
+            exit 1
+          fi
           pm2 save
           echo "✅ Application started"
 
-          # Health check
+          # Health check with better error handling
           echo "🔍 Running health check..."
-          sleep 15
-          if curl -f -s http://localhost:4000/api/health > /dev/null; then
-            echo "✅ Deployment successful!"
-            echo "🌐 Application is running at: http://localhost:4000"
-          else
-            echo "⚠️ Application started but health check failed"
-            pm2 logs trading-app --lines 20
-            exit 1
-          fi
+          HEALTH_CHECK_ATTEMPTS=0
+          MAX_ATTEMPTS=6  # 30 seconds total
+
+          while [ $HEALTH_CHECK_ATTEMPTS -lt $MAX_ATTEMPTS ]; do
+            if curl -f -s --max-time 10 http://localhost:4000/api/health > /dev/null; then
+              echo "✅ Deployment successful!"
+              echo "🌐 Application is running at: http://localhost:4000"
+              echo "📊 PM2 Status:"
+              pm2 list | grep trading-app || true
+              break
+            else
+              echo "⏳ Health check attempt $((HEALTH_CHECK_ATTEMPTS + 1))/$MAX_ATTEMPTS failed, waiting..."
+              HEALTH_CHECK_ATTEMPTS=$((HEALTH_CHECK_ATTEMPTS + 1))
+              sleep 5
+
+              if [ $HEALTH_CHECK_ATTEMPTS -eq $MAX_ATTEMPTS ]; then
+                echo "❌ Health check failed after $MAX_ATTEMPTS attempts"
+                echo "📋 Application logs:"
+                pm2 logs trading-app --lines 20 || true
+                echo "📋 PM2 status:"
+                pm2 list || true
+                echo "🔍 Checking port 4000:"
+                netstat -tlnp | grep :4000 || echo "Port 4000 not listening"
+                exit 1
+              fi
+            fi
+          done
 
   rollback:
     runs-on: ubuntu-latest
