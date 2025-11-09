@@ -20,7 +20,7 @@ Connect to your Lightsail instance and run:
 sudo apt update && sudo apt upgrade -y
 
 # Install required packages
-sudo apt install -y nodejs npm postgresql-client git curl
+sudo apt install -y nodejs npm postgresql-client git curl unzip
 
 # Install PM2 for process management (alternative to systemd)
 sudo npm install -g pm2

@@ -79,9 +79,23 @@ jobs:
             echo "✅ Backup created: .next.backup.$BACKUP_TIME"
           fi
 
-          # Pull latest code from Git
-          echo "📥 Pulling latest code..."
-          git pull origin ${{ github.ref_name }} || git pull origin main || git pull origin master
+          # Download latest code from GitHub
+          echo "📥 Downloading latest code..."
+          # Get the current commit SHA
+          COMMIT_SHA="${{ github.sha }}"
+          echo "📋 Deploying commit: $COMMIT_SHA"
+          
+          # Check if this is a git repository
+          if [ -d ".git" ]; then
+            echo "📋 Updating existing git repository..."
+            git fetch origin
+            git reset --hard $COMMIT_SHA
+          else
+            echo "📋 Initializing fresh git repository..."
+            rm -rf *
+            git clone https://github.com/kaleem-molani/JUNIOR.git .
+            git checkout $COMMIT_SHA
+          fi
           echo "✅ Code updated"
 
           # Securely create environment file
