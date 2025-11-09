@@ -6,8 +6,9 @@
 module.exports = {
   apps: [{
     name: 'trading-app',
-    script: 'npm start',
-    // cwd will be auto-detected if not specified (works for both local and server)
+    script: './node_modules/.bin/next',
+    args: 'start',
+    cwd: process.cwd(), // Explicitly set to current working directory
     instances: 1,
     autorestart: true,
     watch: false,
