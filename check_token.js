@@ -1,0 +1,1 @@
+import { PrismaClient } from '@prisma/client'; const prisma = new PrismaClient(); async function check() { const idea = await prisma.symbol.findFirst({ where: { token: '14366' } }); console.log('Token 14366 in DB:', idea); await prisma.$disconnect(); } check();

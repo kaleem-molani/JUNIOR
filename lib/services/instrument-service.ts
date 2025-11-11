@@ -99,7 +99,7 @@ export class InstrumentService {
 
         // Debug IDEA-EQ specifically
         if (instrument.symbol === 'IDEA-EQ' || item.symbol === 'IDEA-EQ' || item.tradingsymbol === 'IDEA-EQ') {
-          console.log('🔍 [Instrument Service] Found IDEA-EQ at index', index, ':', {
+          console.log('�� [Instrument Service] Found IDEA-EQ at index', index, ':', {
             raw: item,
             processed: instrument,
             token: item.token || item.instrument_token || item.symboltoken,
@@ -193,6 +193,8 @@ export class InstrumentService {
               token: instrument.token,
               symbol: instrument.symbol,
               exch_seg: instrument.exch_seg,
+              name: instrument.name,
+              instrumenttype: instrument.instrumenttype,
             });
           }
 
@@ -224,6 +226,18 @@ export class InstrumentService {
               exchSeg: instrument.exch_seg,
               isActive: true,
             },
+          }).then(result => {
+            // Debug successful upsert for IDEA-EQ
+            if (instrument.symbol === 'IDEA-EQ') {
+              console.log('✅ [Instrument Service] Successfully upserted IDEA-EQ:', {
+                id: result.id,
+                token: result.token,
+                symbol: result.symbol,
+                exchange: result.exchange,
+                isActive: result.isActive,
+              });
+            }
+            return result;
           }).catch(error => {
             console.error('❌ [Instrument Service] Failed to upsert instrument:', {
               token: instrument.token,
@@ -232,6 +246,7 @@ export class InstrumentService {
               instrumenttype: instrument.instrumenttype,
               error: error.message,
               code: error.code,
+              meta: error.meta,
             });
             throw error;
           });
@@ -263,6 +278,24 @@ export class InstrumentService {
     try {
       const instruments = await this.fetchInstrumentsFromAPI();
       await this.storeInstruments(instruments);
+
+      // Check if IDEA-EQ was stored successfully
+      const ideaEq = await prisma.symbol.findFirst({
+        where: { symbol: 'IDEA-EQ' }
+      });
+      console.log('🔍 [Instrument Service] IDEA-EQ after refresh:', ideaEq ? {
+        id: ideaEq.id,
+        token: ideaEq.token,
+        symbol: ideaEq.symbol,
+        exchange: ideaEq.exchange,
+        isActive: ideaEq.isActive,
+      } : 'NOT FOUND');
+
+      // Check total symbol count
+      const totalSymbols = await prisma.symbol.count({
+        where: { isActive: true }
+      });
+      console.log('📊 [Instrument Service] Total active symbols after refresh:', totalSymbols);
 
       console.log('✅ [Instrument Service] Instrument refresh completed successfully');
       console.log('🔄 [Instrument Service] ===== REFRESH COMPLETE =====');

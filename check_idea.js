@@ -1,0 +1,1 @@
+import { PrismaClient } from '@prisma/client'; const prisma = new PrismaClient(); async function check() { const idea = await prisma.symbol.findFirst({ where: { symbol: 'IDEA-EQ' } }); console.log('IDEA-EQ in DB:', idea); await prisma.$disconnect(); } check();
