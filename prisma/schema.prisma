@@ -20,6 +20,7 @@ model User {
   updatedAt DateTime @updatedAt
   isActive  Boolean  @default(false)  // Changed to false - requires admin approval
   isExecutionEnabled Boolean @default(true)
+  mustChangePassword Boolean @default(false)
   primaryBroker String?
   restrictedSymbols String[] @default([])
 

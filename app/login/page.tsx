@@ -101,7 +101,11 @@ function LoginForm() {
             </button>
           </div>
 
-          <div className="text-center">
+          <div className="text-center space-y-2">
+            <Link href="/forgot-password" className="text-indigo-600 hover:text-indigo-500 text-sm sm:text-base font-medium">
+              Forgot your password?
+            </Link>
+            <br />
             <Link href="/register" className="text-indigo-600 hover:text-indigo-500 text-sm sm:text-base font-medium">
               Don&apos;t have an account? Register
             </Link>
